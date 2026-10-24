@@ -1,0 +1,12 @@
+services:
+  01v96-studio:
+    image: gaskb/01v96-studio:latest
+    container_name: 01v96-studio
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - PORT=8096
+      - NODE_ENV=production
