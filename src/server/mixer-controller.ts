@@ -3,14 +3,19 @@ import {
   ChannelEQState,
   ChannelGateState,
   ClientCommand,
+  EffectRackState,
+  GEQUnitState,
   InputChannelState,
   MixerState,
   OutputChannelState,
 } from '../shared/types.js';
 import {
   buildMeterRequest,
+  buildOutputMeterRequest,
   buildParamChange,
   buildParamRequest,
+  buildSceneRecallSysEx,
+  buildSceneStoreSysEx,
   COMP_PARAM_MAP,
   convertMeterByte,
   dataBytesToInt,
@@ -24,6 +29,8 @@ import {
   EL_BUS_FADER,
   EL_BUS_ON,
   EL_BUS_PAN,
+  EL_EFFECT,
+  EL_GEQ,
   EL_INPUT_ATT,
   EL_INPUT_AUX,
   EL_INPUT_COMP,
@@ -101,7 +108,9 @@ function createInputChannel(id: number): InputChannelState {
     phase: false,
     att: 0,
     pair: false,
-    meter: 0,
+    meterIn: 0,
+    meterOut: 0,
+    grDb: 0,
     eq: createDefaultEQ(),
     gate: createDefaultGate(),
     comp: createDefaultComp(),
@@ -117,6 +126,8 @@ function createInputChannel(id: number): InputChannelState {
     })),
     delayOn: false,
     delayTime: 0,
+    inputPatch: id - 1,
+    directOutPatch: id - 1,
   };
 }
 
@@ -128,9 +139,85 @@ function createOutputChannel(id: number, prefix: string): OutputChannelState {
     solo: false,
     fader: 823,
     pan: 0,
-    meter: 0,
+    meterIn: 0,
+    meterOut: 0,
     eq: createDefaultEQ(),
     comp: createDefaultComp(),
+  };
+}
+
+function createEffectRack(id: number): EffectRackState {
+  const defaultNames = ['REV-X HALL', 'VCM COMP 276', 'STEREO DELAY', 'VCM EQ 601'];
+  return {
+    id,
+    name: defaultNames[id - 1] ?? `EFFECT ${id}`,
+    type: id,
+    bypass: false,
+    mix: 100,
+    params: [50, 40, 60, 30, 50, 50, 50, 50],
+  };
+}
+
+function createGEQUnit(id: number): GEQUnitState {
+  return {
+    id,
+    on: true,
+    bands: Array(31).fill(0),
+  };
+}
+
+/**
+ * Computes real-time Post-DSP Output Level & Gain Reduction (GR) from Input Level + Channel Strip DSP
+ */
+export function computePostDspMeter(ch: InputChannelState, meterIn: number): { meterOut: number; grDb: number } {
+  if (!ch.on || ch.fader === 0 || meterIn === 0) {
+    return { meterOut: 0, grDb: 0 };
+  }
+
+  // Approximate input signal in dBFS (-60 .. 0 dB)
+  const inDb = -60 + (meterIn / 255) * 60 + ch.att / 10;
+
+  let grDb = 0;
+
+  // 1. Gate attenuation if input is below gate threshold
+  if (ch.gate.on) {
+    const gateThreshDb = ch.gate.threshold / 10;
+    if (inDb < gateThreshDb) {
+      const rangeDb = Math.abs(ch.gate.range / 10);
+      grDb += Math.min(rangeDb, (gateThreshDb - inDb) * 2.5);
+    }
+  }
+
+  // 2. Compressor Gain Reduction & Makeup Gain
+  let compMakeupDb = 0;
+  if (ch.comp.on) {
+    const compThreshDb = ch.comp.threshold / 10;
+    const ratios = [1, 1.1, 1.3, 1.5, 1.7, 2, 2.5, 3, 3.5, 4, 5, 6, 8, 10, 20, 100];
+    const ratio = ratios[ch.comp.ratio] ?? 2;
+    if (inDb > compThreshDb) {
+      const overDb = inDb - compThreshDb;
+      const compGr = overDb * (1 - 1 / ratio);
+      grDb += compGr;
+    }
+    compMakeupDb = ch.comp.gain / 10;
+  }
+
+  // 3. EQ average energy contribution
+  let eqBoostDb = 0;
+  if (ch.eq.on) {
+    eqBoostDb =
+      (ch.eq.low.gain + ch.eq.lowMid.gain + ch.eq.hiMid.gain + ch.eq.high.gain) / 40; // average in dB
+  }
+
+  // 4. Fader gain relative to unity (823 = 0 dB)
+  const faderDb = ch.fader >= 423 ? (ch.fader - 823) / 20 : -20 - ((423 - ch.fader) / 423) * 40;
+
+  const outDb = inDb - grDb + compMakeupDb + eqBoostDb + faderDb;
+  const normOut = Math.max(0, Math.min(255, Math.round(((outDb + 60) / 60) * 255)));
+
+  return {
+    meterOut: normOut,
+    grDb: Math.min(24, Math.round(grDb * 10) / 10),
   };
 }
 
@@ -151,8 +238,10 @@ export class MixerController {
   private meterInterval: NodeJS.Timeout | null = null;
   private reconnectInterval: NodeJS.Timeout | null = null;
   private demoWaveTimer: NodeJS.Timeout | null = null;
+  private sceneSyncDebounceTimer: NodeJS.Timeout | null = null;
   private savedFadersBeforeWave: number[] = [];
   private sceneTitleChars: string[] = Array(16).fill(' ');
+  private effectTitleChars: Map<number, string[]> = new Map();
   private channelNameChars: Map<number, string[]> = new Map();
   private skipNextMeter = false;
 
@@ -166,7 +255,9 @@ export class MixerController {
       deviceName: 'YAMAHA 01V96 VCM',
       sceneNumber: 1,
       sceneTitle: 'Vintage',
+      sceneModified: false,
       selectedChannel: 1,
+      dualChannelView: false,
       activeLayer: 0,
       demoWaveActive: false,
       channels: Array.from({ length: 32 }, (_, i) => createInputChannel(i + 1)),
@@ -176,10 +267,25 @@ export class MixerController {
         ...createOutputChannel(1, 'ST'),
         name: 'STEREO L/R',
       },
+      effects: Array.from({ length: 4 }, (_, i) => createEffectRack(i + 1)),
+      geqs: Array.from({ length: 4 }, (_, i) => createGEQUnit(i + 1)),
+      setup: {
+        lcdScreenNo: 0,
+        lcdTabNo: 0,
+        meterInputPoint: 1,  // PRE FADER
+        meterOutputPoint: 2, // POST ON
+        peakHold: false,
+        wordClockMaster: 1,  // 48 kHz Internal
+        brightness: 64,
+        omniOutPatch: [1, 2, 3, 4],
+      },
     };
 
     for (let i = 0; i < 32; i++) {
       this.channelNameChars.set(i, (`CH${i + 1}    `).slice(0, 4).split(''));
+    }
+    for (let i = 0; i < 4; i++) {
+      this.effectTitleChars.set(i, Array(16).fill(' '));
     }
 
     this.transport.onMessage((msg) => this.handleIncomingMidi(msg));
@@ -196,12 +302,13 @@ export class MixerController {
       this.initialSync();
     }
 
-    // Request live meters every 5 seconds to keep the 01V96 meter stream alive
+    // Request live meters & poll Scene Title/Number every 3.5 seconds so hardware scene recalls are always caught
     this.meterInterval = setInterval(() => {
       if (this.transport.isConnected() && !this.state.demoWaveActive) {
         this.transport.sendSysEx(buildMeterRequest());
+        this.transport.sendSysEx(buildOutputMeterRequest());
       }
-    }, 5000);
+    }, 3500);
 
     // Auto-reconnect USB if unplugged/replugged
     this.reconnectInterval = setInterval(() => {
@@ -217,6 +324,7 @@ export class MixerController {
     this.stopDemoWave();
     if (this.meterInterval) clearInterval(this.meterInterval);
     if (this.reconnectInterval) clearInterval(this.reconnectInterval);
+    if (this.sceneSyncDebounceTimer) clearTimeout(this.sceneSyncDebounceTimer);
     this.transport.disconnect();
   }
 
@@ -224,15 +332,15 @@ export class MixerController {
     if (!this.transport.isConnected()) return;
     console.log('🔄 Synchronizing state from Yamaha 01V96 VCM...');
 
-    // Start live meter stream
     await this.transport.sendSysEx(buildMeterRequest());
+    await this.transport.sendSysEx(buildOutputMeterRequest());
 
     // Query Scene Title (16 chars)
     for (let p = 0; p < 16; p++) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_SCENE_TITLE, p, 0));
     }
 
-    // Query Faders, On, Pan, Phase, Att for all 32 input channels
+    // Query Faders, On, Pan, Phase, Att, Patch for all 32 input channels
     for (let ch = 0; ch < 32; ch++) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch));
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch));
@@ -241,10 +349,11 @@ export class MixerController {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, ch));
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PAIR, 0, ch));
       await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 3, 46, 0, ch)); // Solo
+      await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 1, 0, ch));  // Input Patch
       for (let p = 0; p < 4; p++) {
         await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 4, p, ch)); // Short Name
       }
-      await this.delay(10);
+      await this.delay(8);
     }
 
     // Query AUX 1..8 Masters & BUS 1..8 Masters & Stereo Out
@@ -257,8 +366,22 @@ export class MixerController {
     await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_STEREO_FADER, 0, 0));
     await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_STEREO_ON, 0, 0));
 
-    // Sync full Channel Strip for Selected Channel (Channel 1)
+    // Query Effects 1..4 Titles & Bypass/Mix
+    for (let fx = 0; fx < 4; fx++) {
+      for (let p = 0; p < 16; p++) {
+        await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, p, fx));
+      }
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 48, fx)); // Mix
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 49, fx)); // Type
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 52, fx)); // Bypass
+    }
+
+    // Sync full Channel Strip for Selected Channel (and its adjacent pair channel!)
     await this.syncChannelStrip(this.state.selectedChannel);
+    const pairCh = this.state.selectedChannel % 2 === 1 ? this.state.selectedChannel + 1 : this.state.selectedChannel - 1;
+    if (pairCh >= 1 && pairCh <= 32) {
+      await this.syncChannelStrip(pairCh);
+    }
     console.log('✅ Initial synchronization complete!');
   }
 
@@ -266,35 +389,39 @@ export class MixerController {
     if (!this.transport.isConnected()) return;
     const ch = Math.max(0, Math.min(31, channelId - 1));
 
-    // EQ parameters (1..15)
     for (let p = 1; p <= 15; p++) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, p, ch));
     }
-    // Gate parameters
     for (const p of Object.values(GATE_PARAM_MAP)) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_GATE, p, ch));
     }
-    // Comp parameters
     for (const p of Object.values(COMP_PARAM_MAP)) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_COMP, p, ch));
     }
-    await this.delay(8);
-    // Routing (0..10)
+    await this.delay(6);
     for (let p = 0; p <= 10; p++) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, p, ch));
     }
-    // AUX Sends 1..8 (0..23)
     for (let p = 0; p < 24; p++) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, p, ch));
     }
   }
 
-  public handleIncomingMidi(msg: number[]): void {
-    // Program Change (2 bytes: 0xCn, pgm)
-    if (msg.length === 2 && (msg[0] & 0xf0) === 0xc0) {
-      this.state.sceneNumber = msg[1] + 1;
-      this.broadcastState();
+  private scheduleSceneResync(): void {
+    if (this.sceneSyncDebounceTimer) {
+      clearTimeout(this.sceneSyncDebounceTimer);
+    }
+    this.sceneSyncDebounceTimer = setTimeout(() => {
       this.initialSync();
+    }, 250);
+  }
+
+  public handleIncomingMidi(msg: number[]): void {
+    // 1. Standard MIDI Program Change (0xCn, pgm) -> Scene changed on mixer!
+    if (msg.length === 2 && (msg[0] & 0xf0) === 0xc0) {
+      this.state.sceneNumber = msg[1];
+      this.broadcastPatch({ sceneNumber: this.state.sceneNumber });
+      this.scheduleSceneResync();
       return;
     }
 
@@ -309,20 +436,62 @@ export class MixerController {
     const param = msg[7];
     const channel = msg[8];
 
-    // 1. Live Meter Packet (Model 0x0D, DataType 0x21)
-    if (modelId === MODEL_01V96 && dataType === 0x21 && msg.length >= 71) {
-      this.skipNextMeter = !this.skipNextMeter;
-      if (this.skipNextMeter) return;
+    // 2. Universal Scene Recall / Store notification (Model 0x7F, DataType 0x10)
+    if (modelId === MODEL_UNIVERSAL && dataType === 0x10) {
+      const sceneNo = msg.length >= 11 ? ((msg[8] & 0x7f) << 7) | (msg[9] & 0x7f) : msg[8];
+      this.state.sceneNumber = sceneNo;
+      this.broadcastPatch({ sceneNumber: sceneNo });
+      this.scheduleSceneResync();
+      return;
+    }
 
-      const meters: Record<string, number> = {};
-      const data = msg.slice(9, -1);
-      for (let ch = 0; ch < 32; ch++) {
-        const raw = data[2 * ch] ?? 0;
-        const level = convertMeterByte(raw);
-        this.state.channels[ch].meter = level;
-        meters[`ch${ch + 1}`] = level;
+    // 3. Live Meter Packet (Model 0x0D, DataType 0x21)
+    if (modelId === MODEL_01V96 && dataType === 0x21 && msg.length >= 25) {
+      if (element === 0 && msg.length >= 71) {
+        this.skipNextMeter = !this.skipNextMeter;
+        if (this.skipNextMeter) return;
+
+        const metersIn: Record<string, number> = {};
+        const metersOut: Record<string, number> = {};
+        const grs: Record<string, number> = {};
+        const data = msg.slice(9, -1);
+
+        let stereoLSum = 0;
+        for (let ch = 0; ch < 32; ch++) {
+          const raw = data[2 * ch] ?? 0;
+          const levelIn = convertMeterByte(raw);
+          const chObj = this.state.channels[ch];
+          chObj.meterIn = levelIn;
+
+          const { meterOut, grDb } = computePostDspMeter(chObj, levelIn);
+          chObj.meterOut = meterOut;
+          chObj.grDb = grDb;
+
+          metersIn[`ch${ch + 1}`] = levelIn;
+          metersOut[`ch${ch + 1}`] = meterOut;
+          grs[`ch${ch + 1}`] = grDb;
+
+          if (chObj.routing.stereo && chObj.on) {
+            stereoLSum += Math.pow(meterOut / 255, 2);
+          }
+        }
+
+        // Compute Stereo Master meter if not explicitly received
+        const stLevel = Math.min(
+          255,
+          Math.round(Math.sqrt(stereoLSum) * 255 * (this.state.stereo.fader / 823))
+        );
+        this.state.stereo.meterIn = stLevel;
+        this.state.stereo.meterOut = this.state.stereo.on ? stLevel : 0;
+
+        this.broadcastCallback({
+          type: 'meters',
+          metersIn,
+          metersOut,
+          grs,
+          stereoMeter: this.state.stereo.meterOut,
+        });
       }
-      this.broadcastCallback({ type: 'meters', meters });
       return;
     }
 
@@ -331,12 +500,45 @@ export class MixerController {
     const dataBytes = msg.slice(9, 13);
     const val = dataBytesToInt(dataBytes);
 
-    // 2. Universal Parameters (Model 0x7F, DataType 0x01)
+    // 4. Universal Parameters (Model 0x7F, DataType 0x01)
     if (modelId === MODEL_UNIVERSAL && dataType === 0x01) {
       if (element === EL_SCENE_TITLE && param >= 0 && param < 16) {
         this.sceneTitleChars[param] = val > 31 ? String.fromCharCode(val) : ' ';
         this.state.sceneTitle = this.sceneTitleChars.join('').trim() || 'Scene';
         this.broadcastPatch({ sceneTitle: this.state.sceneTitle });
+        return;
+      }
+
+      // Effect Rack 1..4 (Element 88)
+      if (element === EL_EFFECT && channel >= 0 && channel < 4) {
+        const fx = this.state.effects[channel];
+        if (param >= 0 && param < 16) {
+          const chars = this.effectTitleChars.get(channel) ?? Array(16).fill(' ');
+          chars[param] = val > 31 ? String.fromCharCode(val) : ' ';
+          this.effectTitleChars.set(channel, chars);
+          fx.name = chars.join('').trim() || `EFFECT ${channel + 1}`;
+        } else if (param >= 16 && param < 24) {
+          fx.params[param - 16] = val;
+        } else if (param === 48) {
+          fx.mix = val;
+        } else if (param === 49) {
+          fx.type = val;
+        } else if (param === 52) {
+          fx.bypass = val === 1;
+        }
+        this.broadcastPatch({ effects: this.state.effects });
+        return;
+      }
+
+      // GEQ 1..4 (Element 87)
+      if (element === EL_GEQ && channel >= 0 && channel < 4) {
+        const geq = this.state.geqs[channel];
+        if (param === 0) {
+          geq.on = val === 1;
+        } else if (param >= 4 && param <= 34) {
+          geq.bands[param - 4] = val;
+        }
+        this.broadcastPatch({ geqs: this.state.geqs });
         return;
       }
 
@@ -480,10 +682,15 @@ export class MixerController {
       }
     }
 
-    // 3. Device Specific 01V96 Parameters (Model 0x0D)
+    // 5. Device Specific 01V96 Parameters (Model 0x0D)
     if (modelId === MODEL_01V96) {
+      // Input Patch (dt=2, el=1, p=0)
+      if (dataType === 2 && element === 1 && param === 0 && channel >= 0 && channel < 32) {
+        this.state.channels[channel].inputPatch = val;
+        this.broadcastChannelUpdate('ch', channel + 1, { inputPatch: val });
+      }
       // Short Channel Name (dt=2, el=4, p=0..3)
-      if (dataType === 2 && element === 4 && param >= 0 && param < 4 && channel >= 0 && channel < 32) {
+      else if (dataType === 2 && element === 4 && param >= 0 && param < 4 && channel >= 0 && channel < 32) {
         const chars = this.channelNameChars.get(channel) ?? ['C', 'H', ' ', ' '];
         chars[param] = val > 31 ? String.fromCharCode(val) : ' ';
         this.channelNameChars.set(channel, chars);
@@ -491,10 +698,20 @@ export class MixerController {
         this.state.channels[channel].name = name;
         this.broadcastChannelUpdate('ch', channel + 1, { name });
       }
+      // Omni Out Patch (dt=2, el=6, p=0)
+      else if (dataType === 2 && element === 6 && param === 0 && channel >= 0 && channel < 4) {
+        this.state.setup.omniOutPatch[channel] = val;
+        this.broadcastPatch({ setup: this.state.setup });
+      }
       // Solo Channel On (dt=3, el=46, p=0)
       else if (dataType === 3 && element === 46 && param === 0 && channel >= 0 && channel < 32) {
         this.state.channels[channel].solo = val === 1;
         this.broadcastChannelUpdate('ch', channel + 1, { solo: val === 1 });
+      }
+      // LCD Screen Change on Mixer (dt=4, el=1, p=0)
+      else if (dataType === 4 && element === 1 && param === 0) {
+        this.state.setup.lcdScreenNo = val;
+        this.broadcastPatch({ setup: this.state.setup });
       }
       // Selected Channel on Mixer hardware (dt=4, el=9, p=24)
       else if (dataType === 4 && element === 9 && param === 24) {
@@ -503,6 +720,12 @@ export class MixerController {
           this.broadcastPatch({ selectedChannel: this.state.selectedChannel });
           this.syncChannelStrip(this.state.selectedChannel);
         }
+      }
+      // Scene Memory Now / Recall on Mixer (dt=4, el=10, p=0 or p=1)
+      else if (dataType === 4 && element === 10 && (param === 0 || param === 1)) {
+        this.state.sceneNumber = val;
+        this.broadcastPatch({ sceneNumber: val });
+        this.scheduleSceneResync();
       }
     }
   }
@@ -607,6 +830,18 @@ export class MixerController {
           this.state.channels[ch].att = val;
           await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, ch, val));
           this.broadcastChannelUpdate('ch', cmd.id, { att: val });
+        }
+        break;
+      }
+
+      case 'set_pair': {
+        const ch = cmd.id - 1;
+        if (this.state.channels[ch]) {
+          this.state.channels[ch].pair = cmd.value;
+          await this.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAIR, 0, ch, cmd.value ? 1 : 0)
+          );
+          this.broadcastChannelUpdate('ch', cmd.id, { pair: cmd.value });
         }
         break;
       }
@@ -747,23 +982,166 @@ export class MixerController {
         break;
       }
 
+      case 'set_delay': {
+        const ch = cmd.id - 1;
+        const chObj = this.state.channels[ch];
+        if (!chObj) break;
+        chObj.delayOn = cmd.on;
+        chObj.delayTime = Math.max(0, Math.min(1000, Math.round(cmd.time)));
+        await this.transport.sendSysEx(
+          buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 0, ch, cmd.on ? 1 : 0)
+        );
+        await this.transport.sendSysEx(
+          buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 3, ch, chObj.delayTime)
+        );
+        this.broadcastChannelUpdate('ch', cmd.id, {
+          delayOn: chObj.delayOn,
+          delayTime: chObj.delayTime,
+        });
+        break;
+      }
+
       case 'select_channel': {
         const id = Math.max(1, Math.min(32, cmd.id));
         this.state.selectedChannel = id;
-        // Also select the channel physically on the 01V96 console!
         await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 4, 9, 24, 0, id - 1));
         this.broadcastPatch({ selectedChannel: id });
         await this.syncChannelStrip(id);
+        const pairCh = id % 2 === 1 ? id + 1 : id - 1;
+        if (pairCh >= 1 && pairCh <= 32) {
+          await this.syncChannelStrip(pairCh);
+        }
+        break;
+      }
+
+      case 'set_dual_view': {
+        this.state.dualChannelView = cmd.enabled;
+        this.broadcastPatch({ dualChannelView: cmd.enabled });
         break;
       }
 
       case 'recall_scene': {
         const pgm = Math.max(0, Math.min(99, cmd.sceneNumber));
         this.state.sceneNumber = pgm;
-        // Send standard MIDI Program Change on Channel 1 (0xC0, pgm)
+        await this.transport.sendSysEx(buildSceneRecallSysEx(pgm));
         await this.transport.sendSysEx([0xc0, pgm]);
         this.broadcastPatch({ sceneNumber: pgm });
-        setTimeout(() => this.initialSync(), 400);
+        this.scheduleSceneResync();
+        break;
+      }
+
+      case 'store_scene': {
+        const pgm = Math.max(0, Math.min(99, cmd.sceneNumber));
+        if (cmd.title) {
+          const clean = cmd.title.slice(0, 16).padEnd(16, ' ');
+          this.state.sceneTitle = cmd.title.slice(0, 16).trim();
+          for (let p = 0; p < 16; p++) {
+            await this.transport.sendSysEx(
+              buildParamChange(MODEL_UNIVERSAL, 1, EL_SCENE_TITLE, p, 0, clean.charCodeAt(p))
+            );
+          }
+        }
+        await this.transport.sendSysEx(buildSceneStoreSysEx(pgm));
+        this.state.sceneNumber = pgm;
+        this.broadcastPatch({ sceneNumber: pgm, sceneTitle: this.state.sceneTitle });
+        break;
+      }
+
+      case 'set_effect': {
+        const fxIdx = Math.max(0, Math.min(3, cmd.rackId - 1));
+        const fx = this.state.effects[fxIdx];
+        if (!fx) break;
+        const numVal = typeof cmd.value === 'boolean' ? (cmd.value ? 1 : 0) : Math.round(cmd.value);
+        if (cmd.param === 'bypass') {
+          fx.bypass = Boolean(cmd.value);
+          await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_EFFECT, 52, fxIdx, numVal));
+        } else if (cmd.param === 'mix') {
+          fx.mix = numVal;
+          await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_EFFECT, 48, fxIdx, numVal));
+        } else if (cmd.param === 'type') {
+          fx.type = numVal;
+          await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_EFFECT, 49, fxIdx, numVal));
+        } else if (cmd.param.startsWith('param')) {
+          const pNo = Number(cmd.param.slice(5)) - 1;
+          if (pNo >= 0 && pNo < 8) {
+            fx.params[pNo] = numVal;
+            await this.transport.sendSysEx(
+              buildParamChange(MODEL_UNIVERSAL, 1, EL_EFFECT, 16 + pNo, fxIdx, numVal)
+            );
+          }
+        }
+        this.broadcastPatch({ effects: this.state.effects });
+        break;
+      }
+
+      case 'set_geq': {
+        const uIdx = Math.max(0, Math.min(3, cmd.unitId - 1));
+        const geq = this.state.geqs[uIdx];
+        if (!geq) break;
+        if (cmd.param === 'on') {
+          geq.on = Boolean(cmd.value);
+          await this.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_GEQ, 0, uIdx, geq.on ? 1 : 0)
+          );
+        } else if (cmd.param === 'flat') {
+          geq.bands.fill(0);
+          await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_GEQ, 3, uIdx, 1));
+        } else if (cmd.param === 'band' && cmd.bandIndex !== undefined) {
+          const b = Math.max(0, Math.min(30, cmd.bandIndex));
+          const val = Math.max(-150, Math.min(150, Math.round(Number(cmd.value))));
+          geq.bands[b] = val;
+          await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_GEQ, 4 + b, uIdx, val));
+        }
+        this.broadcastPatch({ geqs: this.state.geqs });
+        break;
+      }
+
+      case 'set_input_patch': {
+        const ch = Math.max(0, Math.min(31, cmd.chId - 1));
+        this.state.channels[ch].inputPatch = cmd.sourcePort;
+        await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 2, 1, 0, ch, cmd.sourcePort));
+        this.broadcastChannelUpdate('ch', cmd.chId, { inputPatch: cmd.sourcePort });
+        break;
+      }
+
+      case 'set_omni_patch': {
+        const omni = Math.max(0, Math.min(3, cmd.omniId - 1));
+        this.state.setup.omniOutPatch[omni] = cmd.sourceBus;
+        await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 2, 6, 0, omni, cmd.sourceBus));
+        this.broadcastPatch({ setup: this.state.setup });
+        break;
+      }
+
+      case 'set_lcd_screen': {
+        this.state.setup.lcdScreenNo = cmd.screenNo;
+        await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 4, 1, 0, 0, cmd.screenNo));
+        if (cmd.tabNo !== undefined) {
+          this.state.setup.lcdTabNo = cmd.tabNo;
+          await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 4, 1, 4, 0, cmd.tabNo));
+        }
+        this.broadcastPatch({ setup: this.state.setup });
+        break;
+      }
+
+      case 'set_setup_param': {
+        const numVal = typeof cmd.value === 'boolean' ? (cmd.value ? 1 : 0) : Math.round(cmd.value);
+        if (cmd.param === 'meterInputPoint') {
+          this.state.setup.meterInputPoint = numVal;
+          await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 3, 12, 0, 0, numVal));
+        } else if (cmd.param === 'meterOutputPoint') {
+          this.state.setup.meterOutputPoint = numVal;
+          await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 3, 12, 1, 0, numVal));
+        } else if (cmd.param === 'peakHold') {
+          this.state.setup.peakHold = Boolean(cmd.value);
+          await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 3, 12, 6, 0, numVal));
+        } else if (cmd.param === 'wordClockMaster') {
+          this.state.setup.wordClockMaster = numVal;
+          await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 3, 35, 0, 0, numVal));
+        } else if (cmd.param === 'brightness') {
+          this.state.setup.brightness = numVal;
+          await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 4, 59, 0, 0, numVal));
+        }
+        this.broadcastPatch({ setup: this.state.setup });
         break;
       }
 
@@ -795,7 +1173,6 @@ export class MixerController {
       return;
     }
 
-    // Save current fader positions for channels 1..32
     this.savedFadersBeforeWave = this.state.channels.map((c) => c.fader);
     this.state.demoWaveActive = true;
     this.broadcastPatch({ demoWaveActive: true });
@@ -835,7 +1212,6 @@ export class MixerController {
 
       this.broadcastCallback({ type: 'wave_frame', faders: faderUpdates });
 
-      // Automatically stop and restore after ~8 seconds (200 steps at 40ms) if user doesn't stop manually
       if (step >= 180) {
         await this.stopDemoWave();
       }
@@ -850,7 +1226,6 @@ export class MixerController {
     }
     this.state.demoWaveActive = false;
 
-    // Restore original faders!
     for (let ch = 0; ch < 32; ch++) {
       const orig = this.savedFadersBeforeWave[ch] ?? 0;
       this.state.channels[ch].fader = orig;

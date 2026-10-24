@@ -83,6 +83,44 @@ export function buildParamRequest(
   ];
 }
 
+export function buildSceneRecallSysEx(sceneNumber: number): number[] {
+  // Yamaha Universal Digital Mixer Scene Recall: F0 43 10 3E 7F 10 00 00 [msb] [lsb] F7
+  const msb = (sceneNumber >> 7) & 0x7f;
+  const lsb = sceneNumber & 0x7f;
+  return [
+    SYSEX_START,
+    YAMAHA_ID,
+    SUB_PARAM_CHANGE,
+    GROUP_DIGITAL_MIXER,
+    MODEL_UNIVERSAL,
+    0x10,
+    0x00,
+    0x00,
+    msb,
+    lsb,
+    SYSEX_END,
+  ];
+}
+
+export function buildSceneStoreSysEx(sceneNumber: number): number[] {
+  // Yamaha Universal Digital Mixer Scene Store: F0 43 10 3E 7F 10 10 00 [msb] [lsb] F7
+  const msb = (sceneNumber >> 7) & 0x7f;
+  const lsb = sceneNumber & 0x7f;
+  return [
+    SYSEX_START,
+    YAMAHA_ID,
+    SUB_PARAM_CHANGE,
+    GROUP_DIGITAL_MIXER,
+    MODEL_UNIVERSAL,
+    0x10,
+    0x10,
+    0x00,
+    msb,
+    lsb,
+    SYSEX_END,
+  ];
+}
+
 export function buildMeterRequest(): number[] {
   // Requests 32 input meters from 01V96
   return [
@@ -97,6 +135,24 @@ export function buildMeterRequest(): number[] {
     0x00,
     0x00,
     0x1f,
+    SYSEX_END,
+  ];
+}
+
+export function buildOutputMeterRequest(): number[] {
+  // Requests Bus (1..8), Aux (1..8), Stereo meters from 01V96 (Element 1 & 2)
+  return [
+    SYSEX_START,
+    YAMAHA_ID,
+    SUB_PARAM_REQUEST,
+    GROUP_DIGITAL_MIXER,
+    MODEL_01V96,
+    0x21,
+    0x02,
+    0x00,
+    0x00,
+    0x00,
+    0x10,
     SYSEX_END,
   ];
 }
@@ -138,6 +194,9 @@ export const EL_STEREO_PAN = 78;
 export const EL_STEREO_FADER = 79;
 export const EL_STEREO_COMP = 81;
 export const EL_STEREO_EQ = 82;
+
+export const EL_GEQ = 87;
+export const EL_EFFECT = 88;
 
 // EQ parameter indices (same for Input 32, Bus 46, Aux 60, Stereo 82)
 export const EQ_PARAM_MAP: Record<string, number> = {

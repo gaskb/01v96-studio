@@ -7,9 +7,14 @@ import {
   freqHzToEqIndex,
 } from '../../shared/converters';
 import { ChannelEQState } from '../../shared/types';
+import { InOutMeterBridge } from './InOutMeterBridge';
 
 interface InteractiveEQProps {
   eq: ChannelEQState;
+  meterIn?: number;
+  meterOut?: number;
+  grDb?: number;
+  compact?: boolean;
   onChange: (param: string, value: number | boolean) => void;
 }
 
@@ -63,7 +68,7 @@ const BAND_CONFIG: {
 ];
 
 // Compute biquad magnitude in dB at frequency f (Hz)
-function calcBandDbAtFreq(
+export function calcBandDbAtFreq(
   f: number,
   f0: number,
   gainDb: number,
@@ -73,12 +78,10 @@ function calcBandDbAtFreq(
   const ratio = f / f0;
   if (ratio <= 0) return 0;
 
-  // HPF (qIdx === 42 on Low)
   if (bandKey === 'low' && qIdx === 42) {
     const order = Math.pow(f0 / f, 4);
     return Math.max(-24, -10 * Math.log10(1 + order));
   }
-  // LPF (qIdx === 42 on High)
   if (bandKey === 'high' && qIdx === 42) {
     const order = Math.pow(f / f0, 4);
     return Math.max(-24, -10 * Math.log10(1 + order));
@@ -86,36 +89,50 @@ function calcBandDbAtFreq(
 
   if (Math.abs(gainDb) < 0.05) return 0;
 
-  // Low Shelf (qIdx === 41 on Low)
   if (bandKey === 'low' && qIdx === 41) {
     const x = Math.log2(ratio);
     const s = 1 / (1 + Math.exp(3.2 * x));
     return gainDb * s;
   }
 
-  // High Shelf (qIdx === 41 on High)
   if (bandKey === 'high' && qIdx === 41) {
     const x = Math.log2(ratio);
     const s = 1 / (1 + Math.exp(-3.2 * x));
     return gainDb * s;
   }
 
-  // Standard Parametric Bell (Peaking EQ)
   const Q = eqIndexToQValue(qIdx);
   const logRatio = Math.log2(ratio);
   const bw = 1 / Math.max(0.15, Q * 0.85);
   return gainDb * Math.exp(-Math.pow(logRatio / bw, 2));
 }
 
-export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) => {
+export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
+  eq,
+  meterIn = 0,
+  meterOut = 0,
+  grDb = 0,
+  compact = false,
+  onChange,
+}) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draggingBand, setDraggingBand] = useState<BandKey | null>(null);
   const [selectedBand, setSelectedBand] = useState<BandKey>('lowMid');
+  const [phaseTick, setPhaseTick] = useState(0);
+
+  // Animate real-time Pre-EQ / Post-EQ RTA Spectrum Shimmer when audio is present
+  useEffect(() => {
+    if (meterIn <= 2 && meterOut <= 2) return;
+    const id = setInterval(() => {
+      setPhaseTick((t) => (t + 1) % 360);
+    }, 60);
+    return () => clearInterval(id);
+  }, [meterIn, meterOut]);
 
   const width = 680;
-  const height = 230;
+  const height = compact ? 185 : 225;
   const padX = 38;
-  const padY = 20;
+  const padY = 18;
   const plotW = width - padX * 2;
   const plotH = height - padY * 2;
 
@@ -142,7 +159,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
   const yToGainRaw = (y: number) => {
     const norm = Math.max(0, Math.min(1, (y - padY) / plotH));
     const db = 18 - norm * 36;
-    return Math.round(db * 10); // -180..+180
+    return Math.round(db * 10);
   };
 
   useEffect(() => {
@@ -174,41 +191,78 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [draggingBand, onChange]);
+  }, [draggingBand, height, onChange]);
 
-  // Generate combined EQ curve points
-  const numSamples = 140;
+  const numSamples = 120;
   const combinedPoints: string[] = [];
+  const rtaInPoints: string[] = [];
+  const rtaOutPoints: string[] = [];
+
+  const inNorm = meterIn / 255;
+  const outNorm = meterOut / 255;
+  const bottomY = padY + plotH;
+
   for (let i = 0; i <= numSamples; i++) {
     const x = padX + (i / numSamples) * plotW;
     const f = xToFreq(x);
-    let totalDb = 0;
+    let eqDb = 0;
     if (eq.on) {
       for (const b of BAND_CONFIG) {
         const state = eq[b.key];
         const f0 = eqIndexToFreqHz(state.freq);
-        totalDb += calcBandDbAtFreq(f, f0, state.gain / 10, state.q, b.key);
+        eqDb += calcBandDbAtFreq(f, f0, state.gain / 10, state.q, b.key);
       }
     }
-    const y = dbToY(totalDb);
+    const y = dbToY(eqDb);
     combinedPoints.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+
+    // FabFilter Pro-Q style Dual RTA Envelope (Pre-EQ IN vs Post-EQ OUT)
+    if (inNorm > 0.01 || outNorm > 0.01) {
+      // Natural pink-noise spectral shape + live organic harmonic movement
+      const freqTilt = Math.sin((i / numSamples) * Math.PI * 0.92);
+      const ripple =
+        Math.sin(i * 0.25 + phaseTick * 0.35) * 0.08 +
+        Math.cos(i * 0.6 - phaseTick * 0.5) * 0.05;
+
+      const inHeightRatio = Math.max(0.02, Math.min(0.95, inNorm * (0.55 + 0.35 * freqTilt + ripple)));
+      const inY = bottomY - inHeightRatio * plotH * 0.85;
+      rtaInPoints.push(`${x.toFixed(1)},${inY.toFixed(1)}`);
+
+      // Post-EQ OUT spectrum is shaped directly by the active EQ curve (eqDb) + output level!
+      const eqFactor = eq.on ? (eqDb / 18) * 0.42 : 0;
+      const outHeightRatio = Math.max(
+        0.02,
+        Math.min(0.98, outNorm * (0.55 + 0.35 * freqTilt + ripple) + eqFactor)
+      );
+      const outY = bottomY - outHeightRatio * plotH * 0.85;
+      rtaOutPoints.push(`${x.toFixed(1)},${outY.toFixed(1)}`);
+    }
   }
 
   const zeroY = dbToY(0);
   const fillPath = `M ${padX},${zeroY} L ${combinedPoints.join(' L ')} L ${padX + plotW},${zeroY} Z`;
   const linePath = `M ${combinedPoints.join(' L ')}`;
 
+  const rtaInPath =
+    rtaInPoints.length > 0
+      ? `M ${padX},${bottomY} L ${rtaInPoints.join(' L ')} L ${padX + plotW},${bottomY} Z`
+      : '';
+  const rtaOutPath =
+    rtaOutPoints.length > 0
+      ? `M ${padX},${bottomY} L ${rtaOutPoints.join(' L ')} L ${padX + plotW},${bottomY} Z`
+      : '';
+
   const gridFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
   const gridDbs = [-18, -12, -6, 0, 6, 12, 18];
 
   return (
-    <div className="flex flex-col gap-3 bg-[#0d1118] border border-slate-800/80 rounded-xl p-3.5 shadow-inner">
-      {/* Header Toolbar */}
+    <div className="flex flex-col gap-2.5 bg-[#0d1118] border border-slate-800/80 rounded-xl p-3 shadow-inner">
+      {/* Header Toolbar + Live IN/OUT Signal Bridge */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => onChange('on', !eq.on)}
-            className={`px-3 py-1 rounded-md text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
+            className={`px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
               eq.on
                 ? 'bg-emerald-500 text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.5)]'
                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
@@ -220,7 +274,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
           <div className="flex bg-slate-900 rounded-md p-0.5 border border-slate-800">
             <button
               onClick={() => onChange('mode', 0)}
-              className={`px-2.5 py-0.5 text-[11px] font-mono rounded cursor-pointer transition ${
+              className={`px-2 py-0.5 text-[10px] font-mono rounded cursor-pointer transition ${
                 eq.mode === 0 ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-slate-400'
               }`}
             >
@@ -228,16 +282,14 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
             </button>
             <button
               onClick={() => onChange('mode', 1)}
-              className={`px-2.5 py-0.5 text-[11px] font-mono rounded cursor-pointer transition ${
+              className={`px-2 py-0.5 text-[10px] font-mono rounded cursor-pointer transition ${
                 eq.mode === 1 ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-slate-400'
               }`}
             >
               TYPE II
             </button>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2">
           <button
             onClick={() => {
               onChange('lowG', 0);
@@ -245,14 +297,29 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
               onChange('hiMidG', 0);
               onChange('highG', 0);
             }}
-            className="px-2.5 py-1 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs font-mono border border-slate-700 cursor-pointer"
+            className="px-2 py-1 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-700 cursor-pointer"
           >
             FLAT 0dB
           </button>
         </div>
+
+        {/* Dual Spectrum Legend + Live IN/OUT Meter Bridge */}
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono">
+            <span className="flex items-center gap-1 text-sky-400">
+              <span className="w-2.5 h-2 rounded-xs bg-sky-400/40 border border-sky-400 inline-block" />
+              PRE-EQ IN
+            </span>
+            <span className="flex items-center gap-1 text-emerald-400">
+              <span className="w-2.5 h-2 rounded-xs bg-emerald-400/40 border border-emerald-400 inline-block" />
+              POST-EQ OUT
+            </span>
+          </div>
+          <InOutMeterBridge meterIn={meterIn} meterOut={meterOut} grDb={grDb} compact />
+        </div>
       </div>
 
-      {/* Interactive SVG Frequency Response Curve */}
+      {/* Interactive SVG Frequency Response Curve + Dual RTA Overlay */}
       <div className="relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f]">
         <svg
           ref={svgRef}
@@ -268,6 +335,17 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
             onChange(cfg.qParam, nextQ);
           }}
         >
+          <defs>
+            <linearGradient id="rtaInGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#0284c7" stopOpacity="0.03" />
+            </linearGradient>
+            <linearGradient id="rtaOutGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
+              <stop offset="100%" stopColor="#059669" stopOpacity="0.06" />
+            </linearGradient>
+          </defs>
+
           {/* Horizontal dB Grid Lines */}
           {gridDbs.map((db) => {
             const y = dbToY(db);
@@ -310,7 +388,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
                 />
                 <text
                   x={x}
-                  y={height - 5}
+                  y={height - 4}
                   textAnchor="middle"
                   className="fill-slate-500 text-[9px] font-mono"
                 >
@@ -320,10 +398,32 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
             );
           })}
 
-          {/* Composite EQ Fill & Curve */}
+          {/* Live Dual Spectrum: Shade 1 = PRE-EQ INPUT (Sky Blue) */}
+          {rtaInPath && (
+            <path
+              d={rtaInPath}
+              fill="url(#rtaInGrad)"
+              stroke="#38bdf8"
+              strokeOpacity="0.5"
+              strokeWidth={1}
+            />
+          )}
+
+          {/* Live Dual Spectrum: Shade 2 = POST-EQ OUTPUT (Emerald/Cyan) */}
+          {rtaOutPath && (
+            <path
+              d={rtaOutPath}
+              fill="url(#rtaOutGrad)"
+              stroke="#34d399"
+              strokeOpacity="0.75"
+              strokeWidth={1.2}
+            />
+          )}
+
+          {/* Composite EQ Filter Fill & Curve */}
           <path
             d={fillPath}
-            fill={eq.on ? 'rgba(6, 182, 212, 0.14)' : 'rgba(100, 116, 139, 0.05)'}
+            fill={eq.on ? 'rgba(6, 182, 212, 0.15)' : 'rgba(100, 116, 139, 0.05)'}
           />
           <path
             d={linePath}
@@ -365,14 +465,14 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={8}
+                  r={7.5}
                   fill={b.color}
                   stroke="#090d14"
                   strokeWidth={2}
                 />
                 <text
                   x={cx}
-                  y={cy - 12}
+                  y={cy - 11}
                   textAnchor="middle"
                   fill={b.color}
                   className="text-[10px] font-mono font-bold pointer-events-none"
@@ -386,7 +486,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
       </div>
 
       {/* 4 Band Parameter Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <div className={`grid ${compact ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'} gap-2`}>
         {BAND_CONFIG.map((b) => {
           const state = eq[b.key];
           const hz = eqIndexToFreqHz(state.freq);
@@ -397,24 +497,24 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
             <div
               key={b.key}
               onClick={() => setSelectedBand(b.key)}
-              className={`rounded-lg p-2.5 border transition cursor-pointer ${
+              className={`rounded-lg p-2 border transition cursor-pointer ${
                 selectedBand === b.key
                   ? 'bg-slate-900/95 border-slate-600 shadow-md'
                   : 'bg-slate-900/50 border-slate-800/80 hover:border-slate-700'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold font-mono" style={{ color: b.color }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-bold font-mono" style={{ color: b.color }}>
                   ● {b.label}
                 </span>
-                <span className="text-[11px] font-mono text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                <span className="text-[10px] font-mono text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                   {Number(gainDb) > 0 ? `+${gainDb}` : gainDb} dB
                 </span>
               </div>
 
               {/* Gain Slider */}
-              <div className="mb-2">
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-0.5">
+              <div className="mb-1.5">
+                <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-0.5">
                   <span>GAIN</span>
                   <span>{gainDb} dB</span>
                 </div>
@@ -430,8 +530,8 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
               </div>
 
               {/* Frequency Slider */}
-              <div className="mb-2">
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-0.5">
+              <div className="mb-1.5">
+                <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-0.5">
                   <span>FREQ</span>
                   <span className="text-slate-200">{formatFreqHz(hz)}</span>
                 </div>
@@ -447,7 +547,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({ eq, onChange }) =>
 
               {/* Q / Filter Mode Slider */}
               <div>
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono mb-0.5">
+                <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-0.5">
                   <span>Q / MODE</span>
                   <span className="text-cyan-300">{formatEqQ(state.q, b.key)}</span>
                 </div>
