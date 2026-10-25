@@ -160,7 +160,15 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
       )}
 
       {/* Mini Pan Bar */}
-      <div className="w-full mb-1.5 px-0.5">
+      <div
+        className="w-full mb-1.5 px-0.5"
+        onWheel={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const dir = e.deltaY < 0 ? 1 : -1;
+          onChangePan(Math.max(-63, Math.min(63, pan + dir * 2)));
+        }}
+      >
         <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-0.5">
           <span>PAN</span>
           <span className="text-slate-300">{formatPan(pan)}</span>
@@ -177,7 +185,15 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
       </div>
 
       {/* Fader Track + Live LED Meter */}
-      <div className="relative flex-1 w-full flex items-center justify-center gap-1.5 my-1 min-h-[190px]">
+      <div
+        className="relative flex-1 w-full flex items-center justify-center gap-1.5 my-1 min-h-[190px]"
+        onWheel={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const dir = e.deltaY < 0 ? 1 : -1;
+          onChangeFader(Math.max(0, Math.min(1023, fader + dir * 12)));
+        }}
+      >
         {/* dB Scale Tick Marks */}
         <div className="relative h-full w-3 flex flex-col justify-between py-4 text-[8px] font-mono text-slate-500 select-none pointer-events-none">
           <span>+10</span>

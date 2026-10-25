@@ -74,20 +74,16 @@ export function calcBandDbAtFreq(
   gainDb: number,
   qIdx: number,
   bandKey: BandKey,
-  lpfOn = false,
+  _lpfOn = false,
   hpfOn = false
 ): number {
   const ratio = f / f0;
   if (ratio <= 0) return 0;
 
-  // On Yamaha 01V96:
-  // Low band: Q=0..40 Peaking, Q=41 Low Shelf, Q=42 HPF (or when hpfOn is active at Q=42)
   if (bandKey === 'low' && (qIdx === 42 || (hpfOn && qIdx > 41))) {
     const order = Math.pow(f0 / f, 4);
     return Math.max(-24, -10 * Math.log10(1 + order));
   }
-  // High band: Q=0..40 Peaking, Q=42 High Shelf, Q=43 LPF!
-  // (Notice Q=42 on High Band is High Shelf, NOT LPF!)
   if (bandKey === 'high' && qIdx === 43) {
     const order = Math.pow(f / f0, 4);
     return Math.max(-24, -10 * Math.log10(1 + order));
@@ -95,21 +91,18 @@ export function calcBandDbAtFreq(
 
   if (Math.abs(gainDb) < 0.05) return 0;
 
-  // Low Shelf (qIdx === 41 on Low)
   if (bandKey === 'low' && qIdx === 41) {
     const x = Math.log2(ratio);
     const s = 1 / (1 + Math.exp(3.2 * x));
     return gainDb * s;
   }
 
-  // High Shelf (qIdx === 41 or 42 on High)
   if (bandKey === 'high' && (qIdx === 41 || qIdx === 42)) {
     const x = Math.log2(ratio);
     const s = 1 / (1 + Math.exp(-3.2 * x));
     return gainDb * s;
   }
 
-  // Standard Parametric Bell (Peaking EQ)
   const Q = eqIndexToQValue(qIdx);
   const logRatio = Math.log2(ratio);
   const bw = 1 / Math.max(0.15, Q * 0.85);
@@ -127,16 +120,73 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draggingBand, setDraggingBand] = useState<BandKey | null>(null);
   const [selectedBand, setSelectedBand] = useState<BandKey>('lowMid');
-  const [phaseTick, setPhaseTick] = useState(0);
 
-  // Animate real-time Pre-EQ / Post-EQ RTA Spectrum Shimmer when audio is present
+  // Real-time Web Audio FFT Analyzer state (when user activates Audio Input from Audient iD24 / CoreAudio)
+  const [liveAudioActive, setLiveAudioActive] = useState(false);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [fftBinsDb, setFftBinsDb] = useState<Float32Array | null>(null);
+  const [audioSampleRate, setAudioSampleRate] = useState(48000);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+
   useEffect(() => {
-    if (meterIn <= 2 && meterOut <= 2) return;
-    const id = setInterval(() => {
-      setPhaseTick((t) => (t + 1) % 360);
-    }, 60);
-    return () => clearInterval(id);
-  }, [meterIn, meterOut]);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      audioCtxRef.current?.close().catch(() => {});
+    };
+  }, []);
+
+  const toggleLiveFft = async (deviceIdOverride?: string) => {
+    if (liveAudioActive && !deviceIdOverride) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      audioCtxRef.current?.close().catch(() => {});
+      setLiveAudioActive(false);
+      setFftBinsDb(null);
+      return;
+    }
+
+    try {
+      const devId = deviceIdOverride ?? selectedDeviceId;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: devId ? { exact: devId } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      });
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === 'audioinput');
+      setAudioDevices(inputs);
+
+      const ctx = new AudioContext();
+      setAudioSampleRate(ctx.sampleRate);
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 4096;
+      analyser.smoothingTimeConstant = 0.78;
+      source.connect(analyser);
+
+      streamRef.current = stream;
+      audioCtxRef.current = ctx;
+      setLiveAudioActive(true);
+
+      const buf = new Float32Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getFloatFrequencyData(buf);
+        setFftBinsDb(new Float32Array(buf));
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } catch (err) {
+      console.warn('Could not open Web Audio input for real FFT:', err);
+    }
+  };
 
   const width = 560;
   const height = compact ? 160 : 180;
@@ -202,7 +252,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
     };
   }, [draggingBand, height, onChange]);
 
-  const numSamples = 120;
+  const numSamples = 135;
   const combinedPoints: string[] = [];
   const rtaInPoints: string[] = [];
   const rtaOutPoints: string[] = [];
@@ -225,23 +275,32 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
     const y = dbToY(eqDb);
     combinedPoints.push(`${x.toFixed(1)},${y.toFixed(1)}`);
 
-    // Dual RTA Envelope (Pre-EQ IN vs Post-EQ OUT)
-    if (inNorm > 0.01 || outNorm > 0.01) {
-      const freqTilt = Math.sin((i / numSamples) * Math.PI * 0.92);
-      const ripple =
-        Math.sin(i * 0.25 + phaseTick * 0.35) * 0.08 +
-        Math.cos(i * 0.6 - phaseTick * 0.5) * 0.05;
-
-      const inHeightRatio = Math.max(0.02, Math.min(0.95, inNorm * (0.55 + 0.35 * freqTilt + ripple)));
-      const inY = bottomY - inHeightRatio * plotH * 0.85;
+    if (liveAudioActive && fftBinsDb) {
+      // REAL FFT SPECTRUM from Web Audio (e.g. Audient iD24 / Audio Interface)
+      // A 100 Hz sine wave will show a real sharp spike right at 100 Hz!
+      const nyquist = audioSampleRate / 2;
+      const binIdx = Math.min(
+        fftBinsDb.length - 1,
+        Math.max(0, Math.round((f / nyquist) * fftBinsDb.length))
+      );
+      const rawDb = fftBinsDb[binIdx] ?? -100; // typically -100..0 dBFS
+      const normMag = Math.max(0, Math.min(1, (rawDb + 90) / 80));
+      const inY = bottomY - normMag * plotH * 0.92;
       rtaInPoints.push(`${x.toFixed(1)},${inY.toFixed(1)}`);
 
-      const eqFactor = eq.on ? (eqDb / 18) * 0.42 : 0;
-      const outHeightRatio = Math.max(
-        0.02,
-        Math.min(0.98, outNorm * (0.55 + 0.35 * freqTilt + ripple) + eqFactor)
-      );
-      const outY = bottomY - outHeightRatio * plotH * 0.85;
+      const outDbFft = rawDb + (eq.on ? eqDb : 0);
+      const normOutMag = Math.max(0, Math.min(1, (outDbFft + 90) / 80));
+      const outY = bottomY - normOutMag * plotH * 0.92;
+      rtaOutPoints.push(`${x.toFixed(1)},${outY.toFixed(1)}`);
+    } else if (inNorm > 0.01 || outNorm > 0.01) {
+      // HONEST USB-MIDI BROADBAND LEVEL ENVELOPE (01V96 sends 1 RMS value per channel over USB, not FFT)
+      // Flat horizontal level reference + Post-EQ shaped envelope (no fake moving sine waves!)
+      const inY = bottomY - inNorm * plotH * 0.78;
+      rtaInPoints.push(`${x.toFixed(1)},${inY.toFixed(1)}`);
+
+      const eqOffsetRatio = eq.on ? (eqDb / 18) * 0.45 : 0;
+      const outHeight = Math.max(0.02, Math.min(0.98, outNorm * 0.78 + eqOffsetRatio));
+      const outY = bottomY - outHeight * plotH;
       rtaOutPoints.push(`${x.toFixed(1)},${outY.toFixed(1)}`);
     }
   }
@@ -262,11 +321,29 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
   const gridFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
   const gridDbs = [-18, -12, -6, 0, 6, 12, 18];
 
+  // Helper for wheel on any slider bar
+  const handleBarWheel = (
+    e: React.WheelEvent,
+    param: string,
+    currentVal: number,
+    min: number,
+    max: number,
+    step = 1
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const dir = e.deltaY < 0 ? 1 : -1;
+    const next = Math.max(min, Math.min(max, currentVal + dir * step));
+    if (next !== currentVal) {
+      onChange(param, next);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2 bg-[#0d1118] border border-slate-800/80 rounded-xl p-2.5 shadow-inner">
       {/* Header Toolbar + Live IN/OUT Signal Bridge */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => onChange('on', !eq.on)}
             className={`px-2.5 py-0.5 rounded-md text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
@@ -308,27 +385,57 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
           >
             FLAT 0dB
           </button>
+
+          {/* Real Audio FFT Analyzer Button (for Audient iD24 / CoreAudio Input) */}
+          <button
+            onClick={() => toggleLiveFft()}
+            title="Attiva l'analizzatore FFT reale a 4096 punti dall'ingresso audio del Mac (es. Audient iD24 ADAT/Analog)"
+            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition cursor-pointer ${
+              liveAudioActive
+                ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200 shadow-[0_0_10px_rgba(34,211,238,0.3)]'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            🎤 {liveAudioActive ? 'FFT AUDIO REALE: ON' : 'ATTIVA FFT AUDIO REALE (iD24)'}
+          </button>
+
+          {liveAudioActive && audioDevices.length > 1 && (
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => {
+                setSelectedDeviceId(e.target.value);
+                toggleLiveFft(e.target.value);
+              }}
+              className="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] font-mono text-cyan-200 outline-none max-w-[160px]"
+            >
+              {audioDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || 'Audio Input'}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Dual Spectrum Legend + Live IN/OUT Meter Bridge */}
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono">
+          <div className="hidden xl:flex items-center gap-2 text-[10px] font-mono">
             <span className="flex items-center gap-1 text-sky-400">
               <span className="w-2.5 h-2 rounded-xs bg-sky-400/40 border border-sky-400 inline-block" />
-              PRE-EQ IN
+              {liveAudioActive ? 'FFT IN' : 'USB LEVEL IN'}
             </span>
             <span className="flex items-center gap-1 text-emerald-400">
               <span className="w-2.5 h-2 rounded-xs bg-emerald-400/40 border border-emerald-400 inline-block" />
-              POST-EQ OUT
+              {liveAudioActive ? 'FFT POST-EQ' : 'POST-EQ ENVELOPE'}
             </span>
           </div>
           <InOutMeterBridge meterIn={meterIn} meterOut={meterOut} grDb={grDb} compact />
         </div>
       </div>
 
-      {/* SIDE-BY-SIDE LAYOUT: Left = SVG Analyzer, Right = 4 Band Parameter Cards (Zero Vertical Scrolling!) */}
+      {/* SIDE-BY-SIDE LAYOUT: Left = SVG Analyzer, Right = 4 Band Parameter Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch">
-        {/* Interactive SVG Frequency Response Curve + Dual RTA Overlay */}
+        {/* Interactive SVG Frequency Response Curve */}
         <div className="lg:col-span-6 relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f] flex items-center">
           <svg
             ref={svgRef}
@@ -398,7 +505,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
               );
             })}
 
-            {/* Live Dual Spectrum: Shade 1 = PRE-EQ INPUT (Sky Blue) */}
+            {/* Shade 1 = PRE-EQ INPUT */}
             {rtaInPath && (
               <path
                 d={rtaInPath}
@@ -409,7 +516,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
               />
             )}
 
-            {/* Live Dual Spectrum: Shade 2 = POST-EQ OUTPUT (Emerald/Cyan) */}
+            {/* Shade 2 = POST-EQ OUTPUT */}
             {rtaOutPath && (
               <path
                 d={rtaOutPath}
@@ -485,7 +592,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
           </svg>
         </div>
 
-        {/* 4 Band Parameter Cards placed RIGHT BESIDE the Analyzer */}
+        {/* 4 Band Parameter Cards with Mouse Wheel support on EVERY slider bar! */}
         <div
           className={`lg:col-span-6 grid ${
             compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'
@@ -517,8 +624,12 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
                   </span>
                 </div>
 
-                {/* Gain Slider */}
-                <div className="mb-1">
+                {/* Gain Slider (Wheel enabled!) */}
+                <div
+                  className="mb-1"
+                  onWheel={(e) => handleBarWheel(e, b.gParam, state.gain, -180, 180, 5)}
+                  title="Usa anche la rotella del mouse qui sopra per regolare il Gain (±0.5 dB)"
+                >
                   <div className="flex justify-between text-[9px] text-slate-400 font-mono">
                     <span>GAIN</span>
                     <span>{gainDb}dB</span>
@@ -534,8 +645,12 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
                   />
                 </div>
 
-                {/* Frequency Slider */}
-                <div className="mb-1">
+                {/* Frequency Slider (Wheel enabled!) */}
+                <div
+                  className="mb-1"
+                  onWheel={(e) => handleBarWheel(e, b.fParam, state.freq, 0, 119, 1)}
+                  title="Usa anche la rotella del mouse qui sopra per regolare la Frequenza"
+                >
                   <div className="flex justify-between text-[9px] text-slate-400 font-mono">
                     <span>FREQ</span>
                     <span className="text-slate-200">{formatFreqHz(hz)}</span>
@@ -550,8 +665,11 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
                   />
                 </div>
 
-                {/* Q / Filter Mode Slider + Fine [-] [+] Buttons */}
-                <div>
+                {/* Q / Filter Mode Slider (Wheel enabled!) */}
+                <div
+                  onWheel={(e) => handleBarWheel(e, b.qParam, state.q, 0, maxQ, 1)}
+                  title="Usa anche la rotella del mouse qui sopra per regolare il fattore Q"
+                >
                   <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono mb-0.5">
                     <span>Q</span>
                     <div className="flex items-center gap-1">
