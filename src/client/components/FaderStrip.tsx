@@ -46,17 +46,18 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
 
-  const resetFader = () => {
-    // If modified from scene snapshot, restore saved value; if already at saved value, jump to 0.0 dB (823)
-    if (savedFader !== undefined && fader !== savedFader) {
+  const resetFader = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (savedFader !== undefined && !e?.shiftKey && !e?.altKey) {
       onChangeFader(savedFader);
     } else {
       onChangeFader(823);
     }
   };
 
-  const resetPan = () => {
-    if (savedPan !== undefined && pan !== savedPan) {
+  const resetPan = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (savedPan !== undefined && !e?.shiftKey && !e?.altKey) {
       onChangePan(savedPan);
     } else {
       onChangePan(0);

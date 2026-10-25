@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   API_VERSION,
   ClientCommand,
+  ControlMode,
   MixerLayer,
   MixerState,
   UI_VERSION,
@@ -15,7 +16,16 @@ import { SystemMenusPanel } from './components/SystemMenusPanel';
 export const App: React.FC = () => {
   const [state, setState] = useState<MixerState | null>(null);
   const [savedState, setSavedState] = useState<MixerState | null>(null);
+  const [controlMode, setControlMode] = useState<ControlMode>(() => {
+    const stored = window.localStorage.getItem('01v96_control_mode');
+    return stored === 'sliders' ? 'sliders' : 'knobs';
+  });
   const [wsConnected, setWsConnected] = useState(false);
+
+  const handleControlModeChange = useCallback((mode: ControlMode) => {
+    setControlMode(mode);
+    window.localStorage.setItem('01v96_control_mode', mode);
+  }, []);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('console');
   const [layer, setLayer] = useState<MixerLayer>('ch1-16');
   const [faderFlipAux, setFaderFlipAux] = useState<number | null>(null);
@@ -62,7 +72,12 @@ export const App: React.FC = () => {
                 const channels = prev.channels.map((c) =>
                   c.id === msg.id ? { ...c, ...msg.changes } : c
                 );
-                return { ...prev, channels };
+                const savedChannels = msg.savedChannel
+                  ? (prev.savedChannels ?? prev.channels).map((c) =>
+                      c.id === msg.id ? msg.savedChannel : c
+                    )
+                  : prev.savedChannels;
+                return { ...prev, channels, savedChannels };
               }
               if (msg.target === 'aux') {
                 const auxes = prev.auxes.map((a) =>
@@ -148,7 +163,10 @@ export const App: React.FC = () => {
   const selectedChannelObj =
     state.channels.find((c) => c.id === state.selectedChannel) ?? state.channels[0];
   const savedSelectedChannelObj =
-    savedState?.channels.find((c) => c.id === state.selectedChannel) ?? savedState?.channels[0];
+    state.savedChannels?.find((c) => c.id === state.selectedChannel) ??
+    savedState?.channels.find((c) => c.id === state.selectedChannel) ??
+    state.savedChannels?.[0] ??
+    savedState?.channels[0];
 
   const visibleInputChannels =
     layer === 'ch1-16'
@@ -350,6 +368,8 @@ export const App: React.FC = () => {
                 <ChannelStripPanel
                   channel={selectedChannelObj}
                   savedChannel={savedSelectedChannelObj}
+                  controlMode={controlMode}
+                  onChangeControlMode={handleControlModeChange}
                   sendCommand={sendCommand}
                 />
               </div>
@@ -361,7 +381,9 @@ export const App: React.FC = () => {
                   visibleInputChannels.map((ch) => {
                     const isAuxFlip = faderFlipAux !== null;
                     const auxSendObj = isAuxFlip ? ch.auxSends[faderFlipAux - 1] : null;
-                    const savedCh = savedState?.channels.find((c) => c.id === ch.id);
+                    const savedCh =
+                      state.savedChannels?.find((c) => c.id === ch.id) ??
+                      savedState?.channels.find((c) => c.id === ch.id);
                     const savedAuxSendObj =
                       isAuxFlip && savedCh ? savedCh.auxSends[faderFlipAux - 1] : null;
 
@@ -527,6 +549,8 @@ export const App: React.FC = () => {
           <SingleDualChannelView
             state={state}
             savedState={savedState}
+            controlMode={controlMode}
+            onChangeControlMode={handleControlModeChange}
             sendCommand={sendCommand}
           />
         )}

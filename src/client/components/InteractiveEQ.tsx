@@ -6,12 +6,14 @@ import {
   formatFreqHz,
   freqHzToEqIndex,
 } from '../../shared/converters';
-import { ChannelEQState } from '../../shared/types';
+import { ChannelEQState, ControlMode } from '../../shared/types';
 import { InOutMeterBridge } from './InOutMeterBridge';
+import { RotaryKnob } from './RotaryKnob';
 
 interface InteractiveEQProps {
   eq: ChannelEQState;
   savedEq?: ChannelEQState;
+  controlMode?: ControlMode;
   meterIn?: number;
   meterOut?: number;
   grDb?: number;
@@ -126,10 +128,15 @@ export function calcBandDbAtFreq(
 }
 
 /**
- * Toggle between scene saved value and factory default on double-click
+ * Restores the scene's memorized value (`saved`) on double-click, or `factoryDefault` if Shift/Alt is held or no saved value exists.
  */
-function resolveResetValue(current: number, saved: number | undefined, factoryDefault: number): number {
-  if (saved !== undefined && current !== saved) {
+export function resolveResetValue(
+  _current: number,
+  saved: number | undefined,
+  factoryDefault: number,
+  forceFactoryDefault = false
+): number {
+  if (!forceFactoryDefault && saved !== undefined) {
     return saved;
   }
   return factoryDefault;
@@ -138,6 +145,7 @@ function resolveResetValue(current: number, saved: number | undefined, factoryDe
 export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
   eq,
   savedEq,
+  controlMode = 'knobs',
   meterIn = 0,
   meterOut = 0,
   grDb = 0,
@@ -146,10 +154,11 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draggingBand, setDraggingBand] = useState<BandKey | null>(null);
+  const dragOriginRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [selectedBand, setSelectedBand] = useState<BandKey>('lowMid');
 
   const width = 560;
-  const height = compact ? 160 : 180;
+  const height = compact ? 156 : 176;
   const padX = 34;
   const padY = 16;
   const plotW = width - padX * 2;
@@ -185,7 +194,16 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
     if (!draggingBand) return;
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (!svgRef.current) return;
+      if (!svgRef.current || !dragOriginRef.current) return;
+      const dist = Math.hypot(
+        e.clientX - dragOriginRef.current.x,
+        e.clientY - dragOriginRef.current.y
+      );
+      if (!dragOriginRef.current.moved && dist < 3) {
+        return;
+      }
+      dragOriginRef.current.moved = true;
+
       const rect = svgRef.current.getBoundingClientRect();
       const scaleX = width / rect.width;
       const scaleY = height / rect.height;
@@ -202,6 +220,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
 
     const handlePointerUp = () => {
       setDraggingBand(null);
+      dragOriginRef.current = null;
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -289,6 +308,23 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
             </button>
           </div>
 
+          {savedEq && (
+            <button
+              onClick={() => {
+                for (const b of BAND_CONFIG) {
+                  const sb = savedEq[b.key];
+                  onChange(b.gParam, sb.gain);
+                  onChange(b.fParam, sb.freq);
+                  onChange(b.qParam, sb.q);
+                }
+              }}
+              title="Ripristina tutte le 4 bande ai valori memorizzati nella scena"
+              className="px-2 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-[10px] font-mono border border-amber-500/30 cursor-pointer"
+            >
+              ↺ SCENE EQ
+            </button>
+          )}
+
           <button
             onClick={() => {
               onChange('lowG', 0);
@@ -309,7 +345,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
       {/* SIDE-BY-SIDE LAYOUT: Left = SVG Filter Curve, Right = 4 Band Parameter Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch">
         {/* Interactive SVG Frequency Response Curve */}
-        <div className="lg:col-span-6 relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f] flex items-center">
+        <div className="lg:col-span-5 relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f] flex items-center">
           <svg
             ref={svgRef}
             viewBox={`0 0 ${width} ${height}`}
@@ -379,7 +415,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
               strokeWidth={2.5}
             />
 
-            {/* Draggable Band Handles (Double-click resets band Gain & Freq!) */}
+            {/* Draggable Band Handles (Double-click restores scene Gain & Freq!) */}
             {BAND_CONFIG.map((b) => {
               const state = eq[b.key];
               const savedBand = savedEq?.[b.key];
@@ -388,61 +424,88 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
               const cy = dbToY(state.gain / 10);
               const isSel = selectedBand === b.key;
 
+              const hasSavedDiff =
+                savedBand !== undefined &&
+                (savedBand.gain !== state.gain || savedBand.freq !== state.freq);
+              const savedCx = savedBand ? freqToX(eqIndexToFreqHz(savedBand.freq)) : cx;
+              const savedCy = savedBand ? dbToY(savedBand.gain / 10) : cy;
+
               return (
-                <g
-                  key={b.key}
-                  className="cursor-grab active:cursor-grabbing"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    setSelectedBand(b.key);
-                    setDraggingBand(b.key);
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    onChange(
-                      b.gParam,
-                      resolveResetValue(state.gain, savedBand?.gain, b.defaultG)
-                    );
-                  }}
-                >
-                  {isSel && (
+                <g key={b.key}>
+                  {/* Ghost Ring showing the Scene's Memorized Position when moved */}
+                  {hasSavedDiff && (
                     <circle
-                      cx={cx}
-                      cy={cy}
-                      r={13}
-                      fill={b.color}
-                      fillOpacity={0.22}
+                      cx={savedCx}
+                      cy={savedCy}
+                      r={5.5}
+                      fill="none"
                       stroke={b.color}
-                      strokeWidth={1}
+                      strokeOpacity={0.55}
+                      strokeWidth={1.5}
                       strokeDasharray="2 2"
                     />
                   )}
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={7}
-                    fill={b.color}
-                    stroke="#090d14"
-                    strokeWidth={2}
-                  />
-                  <text
-                    x={cx}
-                    y={cy - 10}
-                    textAnchor="middle"
-                    fill={b.color}
-                    className="text-[9px] font-mono font-bold pointer-events-none"
+
+                  <g
+                    className="cursor-grab active:cursor-grabbing"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      setSelectedBand(b.key);
+                      dragOriginRef.current = { x: e.clientX, y: e.clientY, moved: false };
+                      setDraggingBand(b.key);
+                    }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      const forceDefault = e.shiftKey || e.altKey;
+                      onChange(
+                        b.gParam,
+                        resolveResetValue(state.gain, savedBand?.gain, b.defaultG, forceDefault)
+                      );
+                      onChange(
+                        b.fParam,
+                        resolveResetValue(state.freq, savedBand?.freq, b.defaultF, forceDefault)
+                      );
+                    }}
                   >
-                    {b.label}
-                  </text>
+                    {isSel && (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={13}
+                        fill={b.color}
+                        fillOpacity={0.22}
+                        stroke={b.color}
+                        strokeWidth={1}
+                        strokeDasharray="2 2"
+                      />
+                    )}
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={7}
+                      fill={b.color}
+                      stroke="#090d14"
+                      strokeWidth={2}
+                    />
+                    <text
+                      x={cx}
+                      y={cy - 10}
+                      textAnchor="middle"
+                      fill={b.color}
+                      className="text-[9px] font-mono font-bold pointer-events-none"
+                    >
+                      {b.label}
+                    </text>
+                  </g>
                 </g>
               );
             })}
           </svg>
         </div>
 
-        {/* 4 Band Parameter Cards with Mouse Wheel & Double-Click Reset on every numeric value & bar! */}
+        {/* 4 Band Parameter Cards: Either Rotary Potentiometers (Knobs) or Linear Sliders */}
         <div
-          className={`lg:col-span-6 grid ${
+          className={`lg:col-span-7 grid ${
             compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'
           } gap-2 content-between`}
         >
@@ -454,12 +517,42 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
             const maxQ = b.key === 'high' ? 43 : b.key === 'low' ? 42 : 40;
             const qLabel = formatEqQ(state.q, b.key);
 
-            const resetGain = () =>
-              onChange(b.gParam, resolveResetValue(state.gain, savedBand?.gain, b.defaultG));
-            const resetFreq = () =>
-              onChange(b.fParam, resolveResetValue(state.freq, savedBand?.freq, b.defaultF));
-            const resetQ = () =>
-              onChange(b.qParam, resolveResetValue(state.q, savedBand?.q, b.defaultQ));
+            const resetGain = (e?: React.MouseEvent) => {
+              e?.stopPropagation();
+              onChange(
+                b.gParam,
+                resolveResetValue(
+                  state.gain,
+                  savedBand?.gain,
+                  b.defaultG,
+                  Boolean(e?.shiftKey || e?.altKey)
+                )
+              );
+            };
+            const resetFreq = (e?: React.MouseEvent) => {
+              e?.stopPropagation();
+              onChange(
+                b.fParam,
+                resolveResetValue(
+                  state.freq,
+                  savedBand?.freq,
+                  b.defaultF,
+                  Boolean(e?.shiftKey || e?.altKey)
+                )
+              );
+            };
+            const resetQ = (e?: React.MouseEvent) => {
+              e?.stopPropagation();
+              onChange(
+                b.qParam,
+                resolveResetValue(
+                  state.q,
+                  savedBand?.q,
+                  b.defaultQ,
+                  Boolean(e?.shiftKey || e?.altKey)
+                )
+              );
+            };
 
             return (
               <div
@@ -476,100 +569,156 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
                     ● {b.label}
                   </span>
                   <span
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      resetGain();
-                    }}
-                    title="Doppio click per ripristinare il valore salvato / 0 dB"
-                    className="text-[10px] font-mono text-slate-300 bg-slate-950 hover:bg-slate-800 px-1 py-0.5 rounded border border-slate-800 cursor-pointer"
+                    onDoubleClick={resetGain}
+                    title={
+                      savedBand !== undefined
+                        ? `Doppio click: ripristina valore scena (${(savedBand.gain / 10).toFixed(1)} dB) · Shift+Doppio click: 0.0 dB`
+                        : 'Doppio click: ripristina 0.0 dB'
+                    }
+                    className={`text-[10px] font-mono px-1 py-0.5 rounded border cursor-pointer ${
+                      savedBand !== undefined && savedBand.gain !== state.gain
+                        ? 'bg-slate-950 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-950 text-slate-300 border-slate-800 hover:bg-slate-800'
+                    }`}
                   >
                     {Number(gainDb) > 0 ? `+${gainDb}` : gainDb}dB
                   </span>
                 </div>
 
-                {/* Gain Slider (Wheel + Double-Click Reset) */}
-                <div
-                  className="mb-1"
-                  onWheel={(e) => handleBarWheel(e, b.gParam, state.gain, -180, 180, 5)}
-                  onDoubleClick={resetGain}
-                  title="Rotella mouse per regolare, doppio click per ripristinare"
-                >
-                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
-                    <span>GAIN</span>
-                    <span className="hover:text-cyan-300">{gainDb}dB</span>
+                {controlMode === 'knobs' ? (
+                  /* ROTARY POTENTIOMETERS MODE (3 Knobs per Band: GAIN, FREQ, Q) */
+                  <div className="grid grid-cols-3 gap-1 items-center py-1">
+                    <RotaryKnob
+                      label="GAIN"
+                      value={state.gain}
+                      min={-180}
+                      max={180}
+                      step={5}
+                      savedValue={savedBand?.gain}
+                      defaultValue={b.defaultG}
+                      displayValue={`${Number(gainDb) > 0 ? `+${gainDb}` : gainDb}`}
+                      color={b.color}
+                      size={compact ? 42 : 46}
+                      bipolar
+                      onChange={(val) => onChange(b.gParam, val)}
+                    />
+                    <RotaryKnob
+                      label="FREQ"
+                      value={state.freq}
+                      min={0}
+                      max={119}
+                      step={1}
+                      savedValue={savedBand?.freq}
+                      defaultValue={b.defaultF}
+                      displayValue={formatFreqHz(hz)}
+                      color="#f59e0b"
+                      size={compact ? 42 : 46}
+                      onChange={(val) => onChange(b.fParam, val)}
+                    />
+                    <RotaryKnob
+                      label="Q"
+                      value={state.q}
+                      min={0}
+                      max={maxQ}
+                      step={1}
+                      savedValue={savedBand?.q}
+                      defaultValue={b.defaultQ}
+                      displayValue={qLabel}
+                      color="#10b981"
+                      size={compact ? 42 : 46}
+                      onChange={(val) => onChange(b.qParam, val)}
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min={-180}
-                    max={180}
-                    value={state.gain}
-                    onChange={(e) => onChange(b.gParam, Number(e.target.value))}
-                    className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
-
-                {/* Frequency Slider (Wheel + Double-Click Reset) */}
-                <div
-                  className="mb-1"
-                  onWheel={(e) => handleBarWheel(e, b.fParam, state.freq, 0, 119, 1)}
-                  onDoubleClick={resetFreq}
-                  title="Rotella mouse per regolare, doppio click per ripristinare"
-                >
-                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
-                    <span>FREQ</span>
-                    <span className="text-slate-200 hover:text-amber-300">{formatFreqHz(hz)}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={119}
-                    value={state.freq}
-                    onChange={(e) => onChange(b.fParam, Number(e.target.value))}
-                    className="w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
-
-                {/* Q / Filter Mode Slider (Wheel + Double-Click Reset) */}
-                <div
-                  onWheel={(e) => handleBarWheel(e, b.qParam, state.q, 0, maxQ, 1)}
-                  onDoubleClick={resetQ}
-                  title="Rotella mouse per regolare, doppio click per ripristinare"
-                >
-                  <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono mb-0.5">
-                    <span>Q</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onChange(b.qParam, Math.max(0, state.q - 1));
-                        }}
-                        className="px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
-                      >
-                        -
-                      </button>
-                      <span className="text-cyan-300 min-w-[34px] text-center hover:underline">
-                        {qLabel}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onChange(b.qParam, Math.min(maxQ, state.q + 1));
-                        }}
-                        className="px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
-                      >
-                        +
-                      </button>
+                ) : (
+                  /* LINEAR SLIDERS MODE */
+                  <>
+                    {/* Gain Slider */}
+                    <div
+                      className="mb-1"
+                      onWheel={(e) => handleBarWheel(e, b.gParam, state.gain, -180, 180, 5)}
+                      onDoubleClick={resetGain}
+                      title="Rotella mouse per regolare, doppio click per ripristinare valore scena"
+                    >
+                      <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                        <span>GAIN</span>
+                        <span className="hover:text-cyan-300">{gainDb}dB</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={-180}
+                        max={180}
+                        value={state.gain}
+                        onChange={(e) => onChange(b.gParam, Number(e.target.value))}
+                        className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                      />
                     </div>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxQ}
-                    value={state.q}
-                    onChange={(e) => onChange(b.qParam, Number(e.target.value))}
-                    className="w-full accent-emerald-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                  />
-                </div>
+
+                    {/* Frequency Slider */}
+                    <div
+                      className="mb-1"
+                      onWheel={(e) => handleBarWheel(e, b.fParam, state.freq, 0, 119, 1)}
+                      onDoubleClick={resetFreq}
+                      title="Rotella mouse per regolare, doppio click per ripristinare valore scena"
+                    >
+                      <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                        <span>FREQ</span>
+                        <span className="text-slate-200 hover:text-amber-300">
+                          {formatFreqHz(hz)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={119}
+                        value={state.freq}
+                        onChange={(e) => onChange(b.fParam, Number(e.target.value))}
+                        className="w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Q / Filter Mode Slider */}
+                    <div
+                      onWheel={(e) => handleBarWheel(e, b.qParam, state.q, 0, maxQ, 1)}
+                      onDoubleClick={resetQ}
+                      title="Rotella mouse per regolare, doppio click per ripristinare valore scena"
+                    >
+                      <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono mb-0.5">
+                        <span>Q</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onChange(b.qParam, Math.max(0, state.q - 1));
+                            }}
+                            className="px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="text-cyan-300 min-w-[34px] text-center hover:underline">
+                            {qLabel}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onChange(b.qParam, Math.min(maxQ, state.q + 1));
+                            }}
+                            className="px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={maxQ}
+                        value={state.q}
+                        onChange={(e) => onChange(b.qParam, Number(e.target.value))}
+                        className="w-full accent-emerald-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}

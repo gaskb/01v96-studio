@@ -1,6 +1,8 @@
-export const APP_VERSION = '0.3.1';
-export const UI_VERSION = '0.3.1';
-export const API_VERSION = '0.3.1';
+export const APP_VERSION = '0.4.0';
+export const UI_VERSION = '0.4.0';
+export const API_VERSION = '0.4.0';
+
+export type ControlMode = 'knobs' | 'sliders';
 
 export type MixerLayer =
   | 'ch1-16'
@@ -140,6 +142,7 @@ export interface MixerState {
   activeLayer: number;     // 0 = 1-16, 1 = 17-32, 2 = Master/AUX/BUS, 3 = Remote
   demoWaveActive: boolean;
   channels: InputChannelState[];  // 32 input channels
+  savedChannels: InputChannelState[]; // 32 input channels scene snapshot (last stored/synced values)
   auxes: OutputChannelState[];    // 8 AUX masters
   buses: OutputChannelState[];    // 8 BUS masters
   stereo: OutputChannelState;     // Master L/R

@@ -7,7 +7,8 @@ import {
   formatPan,
   freqHzToEqIndex,
 } from '../shared/converters.js';
-import { calcBandDbAtFreq } from '../client/components/InteractiveEQ.js';
+import { calcBandDbAtFreq, resolveResetValue } from '../client/components/InteractiveEQ.js';
+import { resolveKnobReset } from '../client/components/RotaryKnob.js';
 import { computePostDspMeter, MixerController } from '../server/mixer-controller.js';
 import {
   buildMeterRequest,
@@ -160,6 +161,50 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.1)', () => {
     expect(controller.state.effects[0].bypass).toBe(true);
 
     controller.handleIncomingMidi(buildParamChange(MODEL_UNIVERSAL, 1, EL_GEQ, 8, 0, -40));
+    expect(controller.state.effects[0].bypass).toBe(true);
     expect(controller.state.geqs[0].bands[4]).toBe(-40);
+  });
+
+  it('preserves Channel 12 memorized scene EQ (-6.0 dB) when synced and restores it on double-click', async () => {
+    const broadcasts: any[] = [];
+    const controller = new MixerController((msg) => broadcasts.push(msg));
+
+    // Hardware mixer sends Channel 12 (index 11) LowMid Gain (param 7) = -60 (-6.0 dB) during scene/channel sync
+    const ch12SyncMsg = buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, 7, 11, -60);
+    controller.handleIncomingMidi(ch12SyncMsg);
+
+    expect(controller.state.channels[11].eq.lowMid.gain).toBe(-60);
+    expect(controller.state.savedChannels[11].eq.lowMid.gain).toBe(-60);
+
+    // User moves Channel 12 LowMid Gain to +45 (+4.5 dB) in the WebApp
+    await controller.handleClientCommand({
+      type: 'set_eq',
+      target: 'ch',
+      id: 12,
+      param: 'lowMidG',
+      value: 45,
+    });
+
+    expect(controller.state.channels[11].eq.lowMid.gain).toBe(45);
+    // Saved scene value MUST still be -60 (-6.0 dB)!
+    expect(controller.state.savedChannels[11].eq.lowMid.gain).toBe(-60);
+
+    // Double-clicking restores -60 (-6.0 dB), NOT 0!
+    const resetVal = resolveResetValue(
+      controller.state.channels[11].eq.lowMid.gain,
+      controller.state.savedChannels[11].eq.lowMid.gain,
+      0
+    );
+    expect(resetVal).toBe(-60);
+
+    const knobResetVal = resolveKnobReset(
+      controller.state.channels[11].eq.lowMid.gain,
+      controller.state.savedChannels[11].eq.lowMid.gain,
+      0
+    );
+    expect(knobResetVal).toBe(-60);
+
+    // Shift + Double-click forces factory default (0.0 dB)
+    expect(resolveResetValue(45, -60, 0, true)).toBe(0);
   });
 });

@@ -240,6 +240,7 @@ export class MixerController {
   private demoWaveTimer: NodeJS.Timeout | null = null;
   private sceneSyncDebounceTimer: NodeJS.Timeout | null = null;
   private savedFadersBeforeWave: number[] = [];
+  private dirtyParams: Set<string> = new Set();
   private sceneTitleChars: string[] = Array(16).fill(' ');
   private effectTitleChars: Map<number, string[]> = new Map();
   private channelNameChars: Map<number, string[]> = new Map();
@@ -261,6 +262,7 @@ export class MixerController {
       activeLayer: 0,
       demoWaveActive: false,
       channels: Array.from({ length: 32 }, (_, i) => createInputChannel(i + 1)),
+      savedChannels: Array.from({ length: 32 }, (_, i) => createInputChannel(i + 1)),
       auxes: Array.from({ length: 8 }, (_, i) => createOutputChannel(i + 1, 'AUX')),
       buses: Array.from({ length: 8 }, (_, i) => createOutputChannel(i + 1, 'BUS')),
       stereo: {
@@ -331,6 +333,7 @@ export class MixerController {
   async initialSync(): Promise<void> {
     if (!this.transport.isConnected()) return;
     console.log('🔄 Synchronizing state from Yamaha 01V96 VCM...');
+    this.dirtyParams.clear();
 
     await this.transport.sendSysEx(buildMeterRequest());
     await this.transport.sendSysEx(buildOutputMeterRequest());
@@ -340,7 +343,7 @@ export class MixerController {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_SCENE_TITLE, p, 0));
     }
 
-    // Query Faders, On, Pan, Phase, Att, Patch for all 32 input channels
+    // Query Faders, On, Pan, Phase, Att, Patch, and 4-Band EQ for all 32 input channels
     for (let ch = 0; ch < 32; ch++) {
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch));
       await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch));
@@ -353,7 +356,10 @@ export class MixerController {
       for (let p = 0; p < 4; p++) {
         await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 4, p, ch)); // Short Name
       }
-      await this.delay(8);
+      for (let p = 1; p <= 15; p++) {
+        await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, p, ch));
+      }
+      await this.delay(10);
     }
 
     // Query AUX 1..8 Masters & BUS 1..8 Masters & Stereo Out
@@ -544,61 +550,93 @@ export class MixerController {
 
       // Input channel parameters
       if (channel >= 0 && channel < 32) {
+        const chId = channel + 1;
         const chObj = this.state.channels[channel];
+        const savedObj = this.state.savedChannels[channel];
         switch (element) {
           case EL_INPUT_FADER:
             if (param === 0) {
               chObj.fader = val;
-              this.broadcastChannelUpdate('ch', channel + 1, { fader: val });
+              if (!this.dirtyParams.has(`ch${chId}:fader`)) {
+                savedObj.fader = val;
+              }
+              this.broadcastChannelUpdate('ch', chId, { fader: val });
             }
             break;
           case EL_INPUT_ON:
             if (param === 0) {
               chObj.on = val === 1;
-              this.broadcastChannelUpdate('ch', channel + 1, { on: chObj.on });
+              if (!this.dirtyParams.has(`ch${chId}:on`)) {
+                savedObj.on = chObj.on;
+              }
+              this.broadcastChannelUpdate('ch', chId, { on: chObj.on });
             }
             break;
           case EL_INPUT_PAN:
             if (param === 0) {
               chObj.pan = val;
-              this.broadcastChannelUpdate('ch', channel + 1, { pan: val });
+              if (!this.dirtyParams.has(`ch${chId}:pan`)) {
+                savedObj.pan = val;
+              }
+              this.broadcastChannelUpdate('ch', chId, { pan: val });
             }
             break;
           case EL_INPUT_PHASE:
             if (param === 0) {
               chObj.phase = val === 1;
-              this.broadcastChannelUpdate('ch', channel + 1, { phase: chObj.phase });
+              if (!this.dirtyParams.has(`ch${chId}:phase`)) {
+                savedObj.phase = chObj.phase;
+              }
+              this.broadcastChannelUpdate('ch', chId, { phase: chObj.phase });
             }
             break;
           case EL_INPUT_ATT:
             if (param === 0) {
               chObj.att = val;
-              this.broadcastChannelUpdate('ch', channel + 1, { att: val });
+              if (!this.dirtyParams.has(`ch${chId}:att`)) {
+                savedObj.att = val;
+              }
+              this.broadcastChannelUpdate('ch', chId, { att: val });
             }
             break;
           case EL_INPUT_PAIR:
             if (param === 0) {
               chObj.pair = val === 1;
-              this.broadcastChannelUpdate('ch', channel + 1, { pair: chObj.pair });
+              this.broadcastChannelUpdate('ch', chId, { pair: chObj.pair });
             }
             break;
-          case EL_INPUT_EQ:
+          case EL_INPUT_EQ: {
+            const eqKey = INV_EQ_MAP[param];
             this.applyEQParam(chObj.eq, param, val);
-            this.broadcastChannelUpdate('ch', channel + 1, { eq: chObj.eq });
+            if (eqKey && !this.dirtyParams.has(`ch${chId}:eq:${eqKey}`)) {
+              this.applyEQParam(savedObj.eq, param, val);
+            }
+            this.broadcastChannelUpdate('ch', chId, { eq: chObj.eq });
             break;
-          case EL_INPUT_GATE:
+          }
+          case EL_INPUT_GATE: {
+            const gateKey = INV_GATE_MAP[param];
             this.applyGateParam(chObj.gate, param, val);
-            this.broadcastChannelUpdate('ch', channel + 1, { gate: chObj.gate });
+            if (gateKey && !this.dirtyParams.has(`ch${chId}:gate:${gateKey}`)) {
+              this.applyGateParam(savedObj.gate, param, val);
+            }
+            this.broadcastChannelUpdate('ch', chId, { gate: chObj.gate });
             break;
-          case EL_INPUT_COMP:
+          }
+          case EL_INPUT_COMP: {
+            const compKey = INV_COMP_MAP[param];
             this.applyCompParam(chObj.comp, param, val);
-            this.broadcastChannelUpdate('ch', channel + 1, { comp: chObj.comp });
+            if (compKey && !this.dirtyParams.has(`ch${chId}:comp:${compKey}`)) {
+              this.applyCompParam(savedObj.comp, param, val);
+            }
+            this.broadcastChannelUpdate('ch', chId, { comp: chObj.comp });
             break;
+          }
           case EL_INPUT_ROUTING:
             if (param === 0) chObj.routing.stereo = val === 1;
             else if (param === 2) chObj.routing.direct = val === 1;
             else if (param >= 3 && param <= 10) chObj.routing.bus[param - 3] = val === 1;
-            this.broadcastChannelUpdate('ch', channel + 1, { routing: chObj.routing });
+            this.broadcastChannelUpdate('ch', chId, { routing: chObj.routing });
             break;
           case EL_INPUT_AUX:
             if (param >= 0 && param < 24) {
@@ -606,14 +644,24 @@ export class MixerController {
               const sub = param % 3;
               if (sub === 0) chObj.auxSends[auxIdx].on = val === 1;
               else if (sub === 1) chObj.auxSends[auxIdx].pre = val === 1;
-              else if (sub === 2) chObj.auxSends[auxIdx].level = val;
-              this.broadcastChannelUpdate('ch', channel + 1, { auxSends: chObj.auxSends });
+              else if (sub === 2) {
+                chObj.auxSends[auxIdx].level = val;
+                if (!this.dirtyParams.has(`ch${chId}:aux:${auxIdx + 1}:level`)) {
+                  savedObj.auxSends[auxIdx].level = val;
+                }
+              }
+              this.broadcastChannelUpdate('ch', chId, { auxSends: chObj.auxSends });
             }
             break;
           case EL_INPUT_DELAY:
             if (param === 0) chObj.delayOn = val === 1;
-            else if (param === 3) chObj.delayTime = val;
-            this.broadcastChannelUpdate('ch', channel + 1, {
+            else if (param === 3) {
+              chObj.delayTime = val;
+              if (!this.dirtyParams.has(`ch${chId}:delayTime`)) {
+                savedObj.delayTime = val;
+              }
+            }
+            this.broadcastChannelUpdate('ch', chId, {
               delayOn: chObj.delayOn,
               delayTime: chObj.delayTime,
             });
@@ -736,6 +784,7 @@ export class MixerController {
         const ch = cmd.id - 1;
         const val = Math.max(0, Math.min(1023, Math.round(cmd.value)));
         if (cmd.target === 'ch' && this.state.channels[ch]) {
+          this.dirtyParams.add(`ch${cmd.id}:fader`);
           this.state.channels[ch].fader = val;
           await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch, val));
           this.broadcastChannelUpdate('ch', cmd.id, { fader: val });
@@ -792,6 +841,7 @@ export class MixerController {
         const ch = cmd.id - 1;
         const val = Math.max(-63, Math.min(63, Math.round(cmd.value)));
         if (cmd.target === 'ch' && this.state.channels[ch]) {
+          this.dirtyParams.add(`ch${cmd.id}:pan`);
           this.state.channels[ch].pan = val;
           await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAN, 0, ch, val));
           this.broadcastChannelUpdate('ch', cmd.id, { pan: val });
@@ -827,6 +877,7 @@ export class MixerController {
         const ch = cmd.id - 1;
         const val = Math.max(-960, Math.min(180, Math.round(cmd.value)));
         if (this.state.channels[ch]) {
+          this.dirtyParams.add(`ch${cmd.id}:att`);
           this.state.channels[ch].att = val;
           await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, ch, val));
           this.broadcastChannelUpdate('ch', cmd.id, { att: val });
@@ -868,6 +919,7 @@ export class MixerController {
         const numVal = typeof cmd.value === 'boolean' ? (cmd.value ? 1 : 0) : Math.round(cmd.value);
 
         if (cmd.target === 'ch' && this.state.channels[ch]) {
+          this.dirtyParams.add(`ch${cmd.id}:eq:${cmd.param}`);
           this.applyEQParam(this.state.channels[ch].eq, paramIdx, numVal);
           await this.transport.sendSysEx(
             buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, paramIdx, ch, numVal)
@@ -900,6 +952,7 @@ export class MixerController {
         const paramIdx = GATE_PARAM_MAP[cmd.param];
         if (paramIdx === undefined || !this.state.channels[ch]) break;
         const numVal = typeof cmd.value === 'boolean' ? (cmd.value ? 1 : 0) : Math.round(cmd.value);
+        this.dirtyParams.add(`ch${cmd.id}:gate:${cmd.param}`);
         this.applyGateParam(this.state.channels[ch].gate, paramIdx, numVal);
         await this.transport.sendSysEx(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_GATE, paramIdx, ch, numVal)
@@ -915,6 +968,7 @@ export class MixerController {
         const numVal = typeof cmd.value === 'boolean' ? (cmd.value ? 1 : 0) : Math.round(cmd.value);
 
         if (cmd.target === 'ch' && this.state.channels[ch]) {
+          this.dirtyParams.add(`ch${cmd.id}:comp:${cmd.param}`);
           this.applyCompParam(this.state.channels[ch].comp, paramIdx, numVal);
           await this.transport.sendSysEx(
             buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_COMP, paramIdx, ch, numVal)
@@ -972,6 +1026,7 @@ export class MixerController {
         } else if (cmd.param === 'level') {
           sub = 2;
           numVal = Math.max(0, Math.min(1023, Math.round(Number(cmd.value))));
+          this.dirtyParams.add(`ch${cmd.chId}:aux:${cmd.auxId}:level`);
           chObj.auxSends[auxIdx].level = numVal;
         }
         const paramIdx = auxIdx * 3 + sub;
@@ -986,6 +1041,7 @@ export class MixerController {
         const ch = cmd.id - 1;
         const chObj = this.state.channels[ch];
         if (!chObj) break;
+        this.dirtyParams.add(`ch${cmd.id}:delayTime`);
         chObj.delayOn = cmd.on;
         chObj.delayTime = Math.max(0, Math.min(1000, Math.round(cmd.time)));
         await this.transport.sendSysEx(
@@ -1043,7 +1099,9 @@ export class MixerController {
         }
         await this.transport.sendSysEx(buildSceneStoreSysEx(pgm));
         this.state.sceneNumber = pgm;
-        this.broadcastPatch({ sceneNumber: pgm, sceneTitle: this.state.sceneTitle });
+        this.dirtyParams.clear();
+        this.state.savedChannels = structuredClone(this.state.channels);
+        this.broadcastState();
         break;
       }
 
@@ -1300,7 +1358,11 @@ export class MixerController {
     id: number,
     changes: Record<string, unknown>
   ): void {
-    this.broadcastCallback({ type: 'channel_update', target, id, changes });
+    const savedChannel =
+      target === 'ch' && this.state.savedChannels[id - 1]
+        ? this.state.savedChannels[id - 1]
+        : undefined;
+    this.broadcastCallback({ type: 'channel_update', target, id, changes, savedChannel });
   }
 
   private delay(ms: number): Promise<void> {

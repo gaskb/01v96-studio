@@ -1,21 +1,17 @@
 import React, { useState } from 'react';
 import { COMP_RATIOS, faderToDbString, formatPan } from '../../shared/converters';
-import { ClientCommand, InputChannelState } from '../../shared/types';
+import { ClientCommand, ControlMode, InputChannelState } from '../../shared/types';
 import { InOutMeterBridge } from './InOutMeterBridge';
 import { InteractiveEQ } from './InteractiveEQ';
+import { resolveKnobReset, RotaryKnob } from './RotaryKnob';
 
 interface ChannelStripPanelProps {
   channel: InputChannelState;
   savedChannel?: InputChannelState;
+  controlMode: ControlMode;
+  onChangeControlMode: (mode: ControlMode) => void;
   sendCommand: (cmd: ClientCommand) => void;
 }
-
-const resolveReset = (current: number, saved: number | undefined, factoryDefault: number): number => {
-  if (saved !== undefined && current !== saved) {
-    return saved;
-  }
-  return factoryDefault;
-};
 
 const handleSliderWheel = (
   e: React.WheelEvent<HTMLInputElement>,
@@ -37,6 +33,8 @@ const handleSliderWheel = (
 export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
   channel,
   savedChannel,
+  controlMode,
+  onChangeControlMode,
   sendCommand,
 }) => {
   const [activeTab, setActiveTab] = useState<'eq' | 'dyn' | 'aux' | 'routing'>('eq');
@@ -76,16 +74,21 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
             Ø {channel.phase ? '180°' : 'NORM'}
           </button>
 
-          {/* Digital Attenuator (-96..+18 dB) */}
+          {/* Digital Attenuator (-36..+18 dB) */}
           <div
-            onDoubleClick={() =>
+            onDoubleClick={(e) =>
               sendCommand({
                 type: 'set_att',
                 id: channel.id,
-                value: resolveReset(channel.att, savedChannel?.att, 0),
+                value: resolveKnobReset(
+                  channel.att,
+                  savedChannel?.att,
+                  0,
+                  e.shiftKey || e.altKey
+                ),
               })
             }
-            title="Doppio click: ripristina valore memorizzato / 0.0 dB · Rotella mouse: regola"
+            title="Doppio click: ripristina valore memorizzato nella scena · Rotella mouse: regola"
             className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-md px-2 py-1 select-none cursor-pointer"
           >
             <span className="text-[10px] font-mono text-slate-400">ATT</span>
@@ -111,15 +114,20 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
 
           {/* Pan Control */}
           <div
-            onDoubleClick={() =>
+            onDoubleClick={(e) =>
               sendCommand({
                 type: 'set_pan',
                 target: 'ch',
                 id: channel.id,
-                value: resolveReset(channel.pan, savedChannel?.pan, 0),
+                value: resolveKnobReset(
+                  channel.pan,
+                  savedChannel?.pan,
+                  0,
+                  e.shiftKey || e.altKey
+                ),
               })
             }
-            title="Doppio click: ripristina Pan memorizzato / Center · Rotella mouse: regola"
+            title="Doppio click: ripristina Pan memorizzato nella scena · Rotella mouse: regola"
             className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-md px-2 py-1 select-none cursor-pointer"
           >
             <span className="text-[10px] font-mono text-slate-400">PAN</span>
@@ -149,34 +157,63 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
           </div>
         </div>
 
-        {/* Section Sub-Navigation Tabs */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
-          {[
-            { id: 'eq', label: '📊 4-BAND EQ' },
-            { id: 'dyn', label: '🎛️ GATE & COMP' },
-            { id: 'aux', label: '🎚️ AUX 1-8' },
-            { id: 'routing', label: '🔀 ROUTING & DELAY' },
-          ].map((t) => (
+        {/* Right Controls: Control Style Switcher (Knobs vs Sliders) + Section Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            title="Scegli tra Potenziometri Rotanti (stile console) e Barre Slider"
+            className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono"
+          >
             <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as typeof activeTab)}
-              className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition cursor-pointer ${
-                activeTab === t.id
-                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+              onClick={() => onChangeControlMode('knobs')}
+              className={`px-2 py-1 rounded font-bold cursor-pointer transition ${
+                controlMode === 'knobs'
+                  ? 'bg-amber-500 text-slate-950 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              {t.label}
+              🎛️ KNOBS
             </button>
-          ))}
+            <button
+              onClick={() => onChangeControlMode('sliders')}
+              className={`px-2 py-1 rounded font-bold cursor-pointer transition ${
+                controlMode === 'sliders'
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🎚️ SLIDERS
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+            {[
+              { id: 'eq', label: '📊 4-BAND EQ' },
+              { id: 'dyn', label: '🎛️ GATE & COMP' },
+              { id: 'aux', label: '🎚️ AUX 1-8' },
+              { id: 'routing', label: '🔀 ROUTING & DELAY' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id as typeof activeTab)}
+                className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition cursor-pointer ${
+                  activeTab === t.id
+                    ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* TAB 1: 4-Band Parametric EQ with Live IN/OUT/GR Level Bridge */}
+      {/* TAB 1: 4-Band Parametric EQ */}
       {activeTab === 'eq' && (
         <InteractiveEQ
           eq={channel.eq}
           savedEq={savedChannel?.eq}
+          controlMode={controlMode}
           meterIn={channel.meterIn}
           meterOut={channel.meterOut}
           grDb={channel.grDb}
@@ -226,155 +263,254 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: channel.id,
-                      param: 'threshold',
-                      value: resolveReset(channel.gate.threshold, savedChannel?.gate.threshold, -260),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>THRESHOLD</span>
-                    <span className="text-slate-200">{(channel.gate.threshold / 10).toFixed(1)} dB</span>
-                  </div>
-                  <input
-                    type="range"
+              {controlMode === 'knobs' ? (
+                <div className="grid grid-cols-4 gap-2 py-2">
+                  <RotaryKnob
+                    label="THRESHOLD"
+                    value={channel.gate.threshold}
                     min={-540}
                     max={0}
-                    value={channel.gate.threshold}
-                    onChange={(e) =>
+                    step={5}
+                    savedValue={savedChannel?.gate.threshold}
+                    defaultValue={-260}
+                    displayValue={`${(channel.gate.threshold / 10).toFixed(1)}dB`}
+                    color="#f59e0b"
+                    size={52}
+                    onChange={(val) =>
+                      sendCommand({ type: 'set_gate', id: channel.id, param: 'threshold', value: val })
+                    }
+                  />
+                  <RotaryKnob
+                    label="RANGE"
+                    value={channel.gate.range}
+                    min={-700}
+                    max={0}
+                    step={5}
+                    savedValue={savedChannel?.gate.range}
+                    defaultValue={-560}
+                    displayValue={`${(channel.gate.range / 10).toFixed(1)}dB`}
+                    color="#f59e0b"
+                    size={52}
+                    onChange={(val) =>
+                      sendCommand({ type: 'set_gate', id: channel.id, param: 'range', value: val })
+                    }
+                  />
+                  <RotaryKnob
+                    label="ATTACK"
+                    value={channel.gate.attack}
+                    min={0}
+                    max={120}
+                    step={1}
+                    savedValue={savedChannel?.gate.attack}
+                    defaultValue={10}
+                    displayValue={`${channel.gate.attack}`}
+                    color="#f59e0b"
+                    size={52}
+                    onChange={(val) =>
+                      sendCommand({ type: 'set_gate', id: channel.id, param: 'attack', value: val })
+                    }
+                  />
+                  <RotaryKnob
+                    label="DECAY"
+                    value={channel.gate.decay}
+                    min={0}
+                    max={159}
+                    step={1}
+                    savedValue={savedChannel?.gate.decay}
+                    defaultValue={44}
+                    displayValue={`${channel.gate.decay}`}
+                    color="#f59e0b"
+                    size={52}
+                    onChange={(val) =>
+                      sendCommand({ type: 'set_gate', id: channel.id, param: 'decay', value: val })
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    onDoubleClick={(e) =>
                       sendCommand({
                         type: 'set_gate',
                         id: channel.id,
                         param: 'threshold',
-                        value: Number(e.target.value),
+                        value: resolveKnobReset(
+                          channel.gate.threshold,
+                          savedChannel?.gate.threshold,
+                          -260,
+                          e.shiftKey || e.altKey
+                        ),
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.gate.threshold, -540, 0, 5, (val) =>
-                        sendCommand({ type: 'set_gate', id: channel.id, param: 'threshold', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: channel.id,
-                      param: 'range',
-                      value: resolveReset(channel.gate.range, savedChannel?.gate.range, -560),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>RANGE</span>
-                    <span className="text-slate-200">{(channel.gate.range / 10).toFixed(1)} dB</span>
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>THRESHOLD</span>
+                      <span className="text-slate-200">
+                        {(channel.gate.threshold / 10).toFixed(1)} dB
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-540}
+                      max={0}
+                      value={channel.gate.threshold}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_gate',
+                          id: channel.id,
+                          param: 'threshold',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.gate.threshold, -540, 0, 5, (val) =>
+                          sendCommand({
+                            type: 'set_gate',
+                            id: channel.id,
+                            param: 'threshold',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-amber-400 cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min={-700}
-                    max={0}
-                    value={channel.gate.range}
-                    onChange={(e) =>
+
+                  <div
+                    onDoubleClick={(e) =>
                       sendCommand({
                         type: 'set_gate',
                         id: channel.id,
                         param: 'range',
-                        value: Number(e.target.value),
+                        value: resolveKnobReset(
+                          channel.gate.range,
+                          savedChannel?.gate.range,
+                          -560,
+                          e.shiftKey || e.altKey
+                        ),
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.gate.range, -700, 0, 5, (val) =>
-                        sendCommand({ type: 'set_gate', id: channel.id, param: 'range', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: channel.id,
-                      param: 'attack',
-                      value: resolveReset(channel.gate.attack, savedChannel?.gate.attack, 10),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>ATTACK</span>
-                    <span className="text-slate-200">{channel.gate.attack}</span>
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>RANGE</span>
+                      <span className="text-slate-200">
+                        {(channel.gate.range / 10).toFixed(1)} dB
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-700}
+                      max={0}
+                      value={channel.gate.range}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_gate',
+                          id: channel.id,
+                          param: 'range',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.gate.range, -700, 0, 5, (val) =>
+                          sendCommand({ type: 'set_gate', id: channel.id, param: 'range', value: val })
+                        )
+                      }
+                      className="w-full accent-amber-400 cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={120}
-                    value={channel.gate.attack}
-                    onChange={(e) =>
+
+                  <div
+                    onDoubleClick={(e) =>
                       sendCommand({
                         type: 'set_gate',
                         id: channel.id,
                         param: 'attack',
-                        value: Number(e.target.value),
+                        value: resolveKnobReset(
+                          channel.gate.attack,
+                          savedChannel?.gate.attack,
+                          10,
+                          e.shiftKey || e.altKey
+                        ),
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.gate.attack, 0, 120, 1, (val) =>
-                        sendCommand({ type: 'set_gate', id: channel.id, param: 'attack', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: channel.id,
-                      param: 'decay',
-                      value: resolveReset(channel.gate.decay, savedChannel?.gate.decay, 60),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>DECAY</span>
-                    <span className="text-slate-200">{channel.gate.decay}</span>
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>ATTACK</span>
+                      <span className="text-slate-200">{channel.gate.attack}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={120}
+                      value={channel.gate.attack}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_gate',
+                          id: channel.id,
+                          param: 'attack',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.gate.attack, 0, 120, 1, (val) =>
+                          sendCommand({
+                            type: 'set_gate',
+                            id: channel.id,
+                            param: 'attack',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-amber-400 cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={159}
-                    value={channel.gate.decay}
-                    onChange={(e) =>
+
+                  <div
+                    onDoubleClick={(e) =>
                       sendCommand({
                         type: 'set_gate',
                         id: channel.id,
                         param: 'decay',
-                        value: Number(e.target.value),
+                        value: resolveKnobReset(
+                          channel.gate.decay,
+                          savedChannel?.gate.decay,
+                          44,
+                          e.shiftKey || e.altKey
+                        ),
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.gate.decay, 0, 159, 1, (val) =>
-                        sendCommand({ type: 'set_gate', id: channel.id, param: 'decay', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>DECAY</span>
+                      <span className="text-slate-200">{channel.gate.decay}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={159}
+                      value={channel.gate.decay}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_gate',
+                          id: channel.id,
+                          param: 'decay',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.gate.decay, 0, 159, 1, (val) =>
+                          sendCommand({ type: 'set_gate', id: channel.id, param: 'decay', value: val })
+                        )
+                      }
+                      className="w-full accent-amber-400 cursor-pointer"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* COMPRESSOR CARD */}
@@ -403,279 +539,444 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: channel.id,
-                      param: 'threshold',
-                      value: resolveReset(channel.comp.threshold, savedChannel?.comp.threshold, -80),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>THRESHOLD</span>
-                    <span className="text-slate-200">{(channel.comp.threshold / 10).toFixed(1)} dB</span>
-                  </div>
-                  <input
-                    type="range"
+              {controlMode === 'knobs' ? (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 py-2">
+                  <RotaryKnob
+                    label="THRESH"
+                    value={channel.comp.threshold}
                     min={-540}
                     max={0}
-                    value={channel.comp.threshold}
-                    onChange={(e) =>
+                    step={5}
+                    savedValue={savedChannel?.comp.threshold}
+                    defaultValue={-200}
+                    displayValue={`${(channel.comp.threshold / 10).toFixed(1)}dB`}
+                    color="#22d3ee"
+                    size={50}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_comp',
                         target: 'ch',
                         id: channel.id,
                         param: 'threshold',
-                        value: Number(e.target.value),
+                        value: val,
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.comp.threshold, -540, 0, 5, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: channel.id,
-                          param: 'threshold',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
                   />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: channel.id,
-                      param: 'ratio',
-                      value: resolveReset(channel.comp.ratio, savedChannel?.comp.ratio, 4),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default (2.5:1)"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>RATIO</span>
-                    <span className="text-cyan-300 font-bold">{compRatioLabel}</span>
-                  </div>
-                  <input
-                    type="range"
+                  <RotaryKnob
+                    label="RATIO"
+                    value={channel.comp.ratio}
                     min={0}
                     max={15}
-                    value={channel.comp.ratio}
-                    onChange={(e) =>
+                    step={1}
+                    savedValue={savedChannel?.comp.ratio}
+                    defaultValue={5}
+                    displayValue={compRatioLabel}
+                    color="#22d3ee"
+                    size={50}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_comp',
                         target: 'ch',
                         id: channel.id,
                         param: 'ratio',
-                        value: Number(e.target.value),
+                        value: val,
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.comp.ratio, 0, 15, 1, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: channel.id,
-                          param: 'ratio',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
                   />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: channel.id,
-                      param: 'gain',
-                      value: resolveReset(channel.comp.gain, savedChannel?.comp.gain, 0),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / 0.0 dB"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>MAKEUP GAIN</span>
-                    <span className="text-emerald-300">+{(channel.comp.gain / 10).toFixed(1)} dB</span>
-                  </div>
-                  <input
-                    type="range"
+                  <RotaryKnob
+                    label="MAKEUP"
+                    value={channel.comp.gain}
                     min={0}
                     max={180}
-                    value={channel.comp.gain}
-                    onChange={(e) =>
+                    step={5}
+                    savedValue={savedChannel?.comp.gain}
+                    defaultValue={0}
+                    displayValue={`+${(channel.comp.gain / 10).toFixed(1)}dB`}
+                    color="#10b981"
+                    size={50}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_comp',
                         target: 'ch',
                         id: channel.id,
                         param: 'gain',
-                        value: Number(e.target.value),
+                        value: val,
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.comp.gain, 0, 180, 5, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: channel.id,
-                          param: 'gain',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-emerald-400 cursor-pointer"
                   />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: channel.id,
-                      param: 'attack',
-                      value: resolveReset(channel.comp.attack, savedChannel?.comp.attack, 25),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>ATTACK</span>
-                    <span className="text-slate-200">{channel.comp.attack}</span>
-                  </div>
-                  <input
-                    type="range"
+                  <RotaryKnob
+                    label="ATTACK"
+                    value={channel.comp.attack}
                     min={0}
                     max={120}
-                    value={channel.comp.attack}
-                    onChange={(e) =>
+                    step={1}
+                    savedValue={savedChannel?.comp.attack}
+                    defaultValue={30}
+                    displayValue={`${channel.comp.attack}`}
+                    color="#22d3ee"
+                    size={50}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_comp',
                         target: 'ch',
                         id: channel.id,
                         param: 'attack',
-                        value: Number(e.target.value),
+                        value: val,
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.comp.attack, 0, 120, 1, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: channel.id,
-                          param: 'attack',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
                   />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: channel.id,
-                      param: 'release',
-                      value: resolveReset(channel.comp.release, savedChannel?.comp.release, 45),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>RELEASE</span>
-                    <span className="text-slate-200">{channel.comp.release}</span>
-                  </div>
-                  <input
-                    type="range"
+                  <RotaryKnob
+                    label="RELEASE"
+                    value={channel.comp.release}
                     min={0}
                     max={159}
-                    value={channel.comp.release}
-                    onChange={(e) =>
+                    step={1}
+                    savedValue={savedChannel?.comp.release}
+                    defaultValue={40}
+                    displayValue={`${channel.comp.release}`}
+                    color="#22d3ee"
+                    size={50}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_comp',
                         target: 'ch',
                         id: channel.id,
                         param: 'release',
-                        value: Number(e.target.value),
+                        value: val,
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.comp.release, 0, 159, 1, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: channel.id,
-                          param: 'release',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
                   />
-                </div>
-
-                <div
-                  onDoubleClick={() =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: channel.id,
-                      param: 'knee',
-                      value: resolveReset(channel.comp.knee, savedChannel?.comp.knee, 2),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato / default"
-                >
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                    <span>KNEE</span>
-                    <span className="text-slate-200">
-                      {channel.comp.knee === 0 ? 'HARD' : `SOFT ${channel.comp.knee}`}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
+                  <RotaryKnob
+                    label="KNEE"
+                    value={channel.comp.knee}
                     min={0}
                     max={5}
-                    value={channel.comp.knee}
-                    onChange={(e) =>
+                    step={1}
+                    savedValue={savedChannel?.comp.knee}
+                    defaultValue={2}
+                    displayValue={channel.comp.knee === 0 ? 'HARD' : `S${channel.comp.knee}`}
+                    color="#22d3ee"
+                    size={50}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_comp',
                         target: 'ch',
                         id: channel.id,
                         param: 'knee',
-                        value: Number(e.target.value),
+                        value: val,
                       })
                     }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, channel.comp.knee, 0, 5, 1, (val) =>
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div
+                    onDoubleClick={(e) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: channel.id,
+                        param: 'threshold',
+                        value: resolveKnobReset(
+                          channel.comp.threshold,
+                          savedChannel?.comp.threshold,
+                          -200,
+                          e.shiftKey || e.altKey
+                        ),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>THRESHOLD</span>
+                      <span className="text-slate-200">
+                        {(channel.comp.threshold / 10).toFixed(1)} dB
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-540}
+                      max={0}
+                      value={channel.comp.threshold}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'threshold',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.comp.threshold, -540, 0, 5, (val) =>
+                          sendCommand({
+                            type: 'set_comp',
+                            target: 'ch',
+                            id: channel.id,
+                            param: 'threshold',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div
+                    onDoubleClick={(e) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: channel.id,
+                        param: 'ratio',
+                        value: resolveKnobReset(
+                          channel.comp.ratio,
+                          savedChannel?.comp.ratio,
+                          5,
+                          e.shiftKey || e.altKey
+                        ),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>RATIO</span>
+                      <span className="text-cyan-300 font-bold">{compRatioLabel}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={15}
+                      value={channel.comp.ratio}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'ratio',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.comp.ratio, 0, 15, 1, (val) =>
+                          sendCommand({
+                            type: 'set_comp',
+                            target: 'ch',
+                            id: channel.id,
+                            param: 'ratio',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div
+                    onDoubleClick={(e) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: channel.id,
+                        param: 'gain',
+                        value: resolveKnobReset(
+                          channel.comp.gain,
+                          savedChannel?.comp.gain,
+                          0,
+                          e.shiftKey || e.altKey
+                        ),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>MAKEUP GAIN</span>
+                      <span className="text-emerald-300">
+                        +{(channel.comp.gain / 10).toFixed(1)} dB
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={180}
+                      value={channel.comp.gain}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'gain',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.comp.gain, 0, 180, 5, (val) =>
+                          sendCommand({
+                            type: 'set_comp',
+                            target: 'ch',
+                            id: channel.id,
+                            param: 'gain',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-emerald-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div
+                    onDoubleClick={(e) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: channel.id,
+                        param: 'attack',
+                        value: resolveKnobReset(
+                          channel.comp.attack,
+                          savedChannel?.comp.attack,
+                          30,
+                          e.shiftKey || e.altKey
+                        ),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>ATTACK</span>
+                      <span className="text-slate-200">{channel.comp.attack}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={120}
+                      value={channel.comp.attack}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'attack',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.comp.attack, 0, 120, 1, (val) =>
+                          sendCommand({
+                            type: 'set_comp',
+                            target: 'ch',
+                            id: channel.id,
+                            param: 'attack',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div
+                    onDoubleClick={(e) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: channel.id,
+                        param: 'release',
+                        value: resolveKnobReset(
+                          channel.comp.release,
+                          savedChannel?.comp.release,
+                          40,
+                          e.shiftKey || e.altKey
+                        ),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>RELEASE</span>
+                      <span className="text-slate-200">{channel.comp.release}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={159}
+                      value={channel.comp.release}
+                      onChange={(e) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'release',
+                          value: Number(e.target.value),
+                        })
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.comp.release, 0, 159, 1, (val) =>
+                          sendCommand({
+                            type: 'set_comp',
+                            target: 'ch',
+                            id: channel.id,
+                            param: 'release',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
+
+                  <div
+                    onDoubleClick={(e) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: channel.id,
+                        param: 'knee',
+                        value: resolveKnobReset(
+                          channel.comp.knee,
+                          savedChannel?.comp.knee,
+                          2,
+                          e.shiftKey || e.altKey
+                        ),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato nella scena"
+                  >
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                      <span>KNEE</span>
+                      <span className="text-slate-200">
+                        {channel.comp.knee === 0 ? 'HARD' : `SOFT ${channel.comp.knee}`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={5}
+                      value={channel.comp.knee}
+                      onChange={(e) =>
                         sendCommand({
                           type: 'set_comp',
                           target: 'ch',
                           id: channel.id,
                           param: 'knee',
-                          value: val,
+                          value: Number(e.target.value),
                         })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
-                  />
+                      }
+                      onWheel={(e) =>
+                        handleSliderWheel(e, channel.comp.knee, 0, 5, 1, (val) =>
+                          sendCommand({
+                            type: 'set_comp',
+                            target: 'ch',
+                            id: channel.id,
+                            param: 'knee',
+                            value: val,
+                          })
+                        )
+                      }
+                      className="w-full accent-cyan-400 cursor-pointer"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -693,6 +994,7 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
             {channel.auxSends.map((aux, idx) => {
               const auxId = idx + 1;
+              const savedLevel = savedChannel?.auxSends[idx]?.level;
               return (
                 <div
                   key={auxId}
@@ -736,22 +1038,19 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                     </button>
                   </div>
 
-                  <input
-                    type="range"
-                    min={0}
-                    max={1023}
-                    value={aux.level}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_aux_send',
-                        chId: channel.id,
-                        auxId,
-                        param: 'level',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, aux.level, 0, 1023, 12, (val) =>
+                  {controlMode === 'knobs' ? (
+                    <RotaryKnob
+                      label="SEND"
+                      value={aux.level}
+                      min={0}
+                      max={1023}
+                      step={12}
+                      savedValue={savedLevel}
+                      defaultValue={823}
+                      displayValue={faderToDbString(aux.level)}
+                      color="#f59e0b"
+                      size={52}
+                      onChange={(val) =>
                         sendCommand({
                           type: 'set_aux_send',
                           chId: channel.id,
@@ -759,34 +1058,73 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                           param: 'level',
                           value: val,
                         })
-                      )
-                    }
-                    onDoubleClick={() =>
-                      sendCommand({
-                        type: 'set_aux_send',
-                        chId: channel.id,
-                        auxId,
-                        param: 'level',
-                        value: resolveReset(aux.level, savedChannel?.auxSends[idx]?.level, 823),
-                      })
-                    }
-                    className="w-full accent-amber-400 cursor-pointer my-1"
-                  />
-                  <span
-                    onDoubleClick={() =>
-                      sendCommand({
-                        type: 'set_aux_send',
-                        chId: channel.id,
-                        auxId,
-                        param: 'level',
-                        value: resolveReset(aux.level, savedChannel?.auxSends[idx]?.level, 823),
-                      })
-                    }
-                    title="Doppio click: ripristina valore memorizzato / 0.0 dB"
-                    className="text-[10px] font-mono text-slate-300 cursor-pointer select-none"
-                  >
-                    {faderToDbString(aux.level)}
-                  </span>
+                      }
+                    />
+                  ) : (
+                    <>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1023}
+                        value={aux.level}
+                        onChange={(e) =>
+                          sendCommand({
+                            type: 'set_aux_send',
+                            chId: channel.id,
+                            auxId,
+                            param: 'level',
+                            value: Number(e.target.value),
+                          })
+                        }
+                        onWheel={(e) =>
+                          handleSliderWheel(e, aux.level, 0, 1023, 12, (val) =>
+                            sendCommand({
+                              type: 'set_aux_send',
+                              chId: channel.id,
+                              auxId,
+                              param: 'level',
+                              value: val,
+                            })
+                          )
+                        }
+                        onDoubleClick={(e) =>
+                          sendCommand({
+                            type: 'set_aux_send',
+                            chId: channel.id,
+                            auxId,
+                            param: 'level',
+                            value: resolveKnobReset(
+                              aux.level,
+                              savedLevel,
+                              823,
+                              e.shiftKey || e.altKey
+                            ),
+                          })
+                        }
+                        className="w-full accent-amber-400 cursor-pointer my-1"
+                      />
+                      <span
+                        onDoubleClick={(e) =>
+                          sendCommand({
+                            type: 'set_aux_send',
+                            chId: channel.id,
+                            auxId,
+                            param: 'level',
+                            value: resolveKnobReset(
+                              aux.level,
+                              savedLevel,
+                              823,
+                              e.shiftKey || e.altKey
+                            ),
+                          })
+                        }
+                        title="Doppio click: ripristina valore memorizzato nella scena"
+                        className="text-[10px] font-mono text-slate-300 cursor-pointer select-none"
+                      >
+                        {faderToDbString(aux.level)}
+                      </span>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -889,47 +1227,77 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                   {channel.delayOn ? 'DELAY ON' : 'OFF'}
                 </button>
               </div>
-              <div
-                onDoubleClick={() =>
-                  sendCommand({
-                    type: 'set_delay',
-                    id: channel.id,
-                    on: channel.delayOn,
-                    time: resolveReset(channel.delayTime, savedChannel?.delayTime, 0),
-                  })
-                }
-                title="Doppio click: ripristina valore memorizzato / 0.0 ms"
-              >
-                <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
-                  <span>DELAY TIME</span>
-                  <span className="text-slate-200">{(channel.delayTime * 0.45).toFixed(1)} ms</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1000}
-                  value={channel.delayTime}
-                  onChange={(e) =>
-                    sendCommand({
-                      type: 'set_delay',
-                      id: channel.id,
-                      on: channel.delayOn,
-                      time: Number(e.target.value),
-                    })
-                  }
-                  onWheel={(e) =>
-                    handleSliderWheel(e, channel.delayTime, 0, 1000, 5, (val) =>
+              {controlMode === 'knobs' ? (
+                <div className="flex justify-center py-1">
+                  <RotaryKnob
+                    label="DELAY TIME"
+                    value={channel.delayTime}
+                    min={0}
+                    max={1000}
+                    step={5}
+                    savedValue={savedChannel?.delayTime}
+                    defaultValue={0}
+                    displayValue={`${(channel.delayTime * 0.45).toFixed(1)} ms`}
+                    color="#22d3ee"
+                    size={52}
+                    onChange={(val) =>
                       sendCommand({
                         type: 'set_delay',
                         id: channel.id,
                         on: channel.delayOn,
                         time: val,
                       })
-                    )
+                    }
+                  />
+                </div>
+              ) : (
+                <div
+                  onDoubleClick={(e) =>
+                    sendCommand({
+                      type: 'set_delay',
+                      id: channel.id,
+                      on: channel.delayOn,
+                      time: resolveKnobReset(
+                        channel.delayTime,
+                        savedChannel?.delayTime,
+                        0,
+                        e.shiftKey || e.altKey
+                      ),
+                    })
                   }
-                  className="w-full accent-cyan-400 cursor-pointer"
-                />
-              </div>
+                  title="Doppio click: ripristina valore memorizzato nella scena"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+                    <span>DELAY TIME</span>
+                    <span className="text-slate-200">{(channel.delayTime * 0.45).toFixed(1)} ms</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1000}
+                    value={channel.delayTime}
+                    onChange={(e) =>
+                      sendCommand({
+                        type: 'set_delay',
+                        id: channel.id,
+                        on: channel.delayOn,
+                        time: Number(e.target.value),
+                      })
+                    }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.delayTime, 0, 1000, 5, (val) =>
+                        sendCommand({
+                          type: 'set_delay',
+                          id: channel.id,
+                          on: channel.delayOn,
+                          time: val,
+                        })
+                      )
+                    }
+                    className="w-full accent-cyan-400 cursor-pointer"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
