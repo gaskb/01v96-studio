@@ -14,6 +14,7 @@ import { SystemMenusPanel } from './components/SystemMenusPanel';
 
 export const App: React.FC = () => {
   const [state, setState] = useState<MixerState | null>(null);
+  const [savedState, setSavedState] = useState<MixerState | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('console');
   const [layer, setLayer] = useState<MixerLayer>('ch1-16');
@@ -41,8 +42,19 @@ export const App: React.FC = () => {
           const msg = JSON.parse(ev.data);
           if (msg.type === 'full_state') {
             setState(msg.state);
+            setSavedState(structuredClone(msg.state));
           } else if (msg.type === 'state_patch') {
-            setState((prev) => (prev ? { ...prev, ...msg.patch } : prev));
+            setState((prev) => {
+              if (!prev) return prev;
+              const next = { ...prev, ...msg.patch };
+              if (
+                msg.patch.sceneNumber !== undefined &&
+                msg.patch.sceneNumber !== prev.sceneNumber
+              ) {
+                setSavedState(structuredClone(next));
+              }
+              return next;
+            });
           } else if (msg.type === 'channel_update') {
             setState((prev) => {
               if (!prev) return prev;
@@ -135,6 +147,8 @@ export const App: React.FC = () => {
 
   const selectedChannelObj =
     state.channels.find((c) => c.id === state.selectedChannel) ?? state.channels[0];
+  const savedSelectedChannelObj =
+    savedState?.channels.find((c) => c.id === state.selectedChannel) ?? savedState?.channels[0];
 
   const visibleInputChannels =
     layer === 'ch1-16'
@@ -333,7 +347,11 @@ export const App: React.FC = () => {
           <>
             {showChannelStrip && (
               <div className="h-[48%] min-h-[300px] shrink-0">
-                <ChannelStripPanel channel={selectedChannelObj} sendCommand={sendCommand} />
+                <ChannelStripPanel
+                  channel={selectedChannelObj}
+                  savedChannel={savedSelectedChannelObj}
+                  sendCommand={sendCommand}
+                />
               </div>
             )}
 
@@ -343,6 +361,9 @@ export const App: React.FC = () => {
                   visibleInputChannels.map((ch) => {
                     const isAuxFlip = faderFlipAux !== null;
                     const auxSendObj = isAuxFlip ? ch.auxSends[faderFlipAux - 1] : null;
+                    const savedCh = savedState?.channels.find((c) => c.id === ch.id);
+                    const savedAuxSendObj =
+                      isAuxFlip && savedCh ? savedCh.auxSends[faderFlipAux - 1] : null;
 
                     return (
                       <FaderStrip
@@ -353,7 +374,9 @@ export const App: React.FC = () => {
                         on={isAuxFlip ? (auxSendObj?.on ?? true) : ch.on}
                         solo={ch.solo}
                         fader={isAuxFlip ? (auxSendObj?.level ?? 0) : ch.fader}
+                        savedFader={isAuxFlip ? savedAuxSendObj?.level : savedCh?.fader}
                         pan={ch.pan}
+                        savedPan={savedCh?.pan}
                         meter={ch.meterOut || ch.meterIn}
                         selected={state.selectedChannel === ch.id}
                         accentColor={isAuxFlip ? 'amber' : 'cyan'}
@@ -403,56 +426,66 @@ export const App: React.FC = () => {
                   })}
 
                 {layer === 'stin-aux' &&
-                  state.auxes.map((aux) => (
-                    <FaderStrip
-                      key={`aux-${aux.id}`}
-                      id={aux.id}
-                      label={`AUX ${aux.id}`}
-                      name={aux.name}
-                      on={aux.on}
-                      fader={aux.fader}
-                      pan={aux.pan}
-                      meter={aux.meterOut}
-                      selected={false}
-                      accentColor="amber"
-                      onSelect={() => {}}
-                      onChangeFader={(val) =>
-                        sendCommand({ type: 'set_fader', target: 'aux', id: aux.id, value: val })
-                      }
-                      onToggleOn={() =>
-                        sendCommand({ type: 'set_on', target: 'aux', id: aux.id, value: !aux.on })
-                      }
-                      onChangePan={(val) =>
-                        sendCommand({ type: 'set_pan', target: 'aux', id: aux.id, value: val })
-                      }
-                    />
-                  ))}
+                  state.auxes.map((aux) => {
+                    const savedAux = savedState?.auxes.find((a) => a.id === aux.id);
+                    return (
+                      <FaderStrip
+                        key={`aux-${aux.id}`}
+                        id={aux.id}
+                        label={`AUX ${aux.id}`}
+                        name={aux.name}
+                        on={aux.on}
+                        fader={aux.fader}
+                        savedFader={savedAux?.fader}
+                        pan={aux.pan}
+                        savedPan={savedAux?.pan}
+                        meter={aux.meterOut}
+                        selected={false}
+                        accentColor="amber"
+                        onSelect={() => {}}
+                        onChangeFader={(val) =>
+                          sendCommand({ type: 'set_fader', target: 'aux', id: aux.id, value: val })
+                        }
+                        onToggleOn={() =>
+                          sendCommand({ type: 'set_on', target: 'aux', id: aux.id, value: !aux.on })
+                        }
+                        onChangePan={(val) =>
+                          sendCommand({ type: 'set_pan', target: 'aux', id: aux.id, value: val })
+                        }
+                      />
+                    );
+                  })}
 
                 {layer === 'bus-master' &&
-                  state.buses.map((bus) => (
-                    <FaderStrip
-                      key={`bus-${bus.id}`}
-                      id={bus.id}
-                      label={`BUS ${bus.id}`}
-                      name={bus.name}
-                      on={bus.on}
-                      fader={bus.fader}
-                      pan={bus.pan}
-                      meter={bus.meterOut}
-                      selected={false}
-                      accentColor="purple"
-                      onSelect={() => {}}
-                      onChangeFader={(val) =>
-                        sendCommand({ type: 'set_fader', target: 'bus', id: bus.id, value: val })
-                      }
-                      onToggleOn={() =>
-                        sendCommand({ type: 'set_on', target: 'bus', id: bus.id, value: !bus.on })
-                      }
-                      onChangePan={(val) =>
-                        sendCommand({ type: 'set_pan', target: 'bus', id: bus.id, value: val })
-                      }
-                    />
-                  ))}
+                  state.buses.map((bus) => {
+                    const savedBus = savedState?.buses.find((b) => b.id === bus.id);
+                    return (
+                      <FaderStrip
+                        key={`bus-${bus.id}`}
+                        id={bus.id}
+                        label={`BUS ${bus.id}`}
+                        name={bus.name}
+                        on={bus.on}
+                        fader={bus.fader}
+                        savedFader={savedBus?.fader}
+                        pan={bus.pan}
+                        savedPan={savedBus?.pan}
+                        meter={bus.meterOut}
+                        selected={false}
+                        accentColor="purple"
+                        onSelect={() => {}}
+                        onChangeFader={(val) =>
+                          sendCommand({ type: 'set_fader', target: 'bus', id: bus.id, value: val })
+                        }
+                        onToggleOn={() =>
+                          sendCommand({ type: 'set_on', target: 'bus', id: bus.id, value: !bus.on })
+                        }
+                        onChangePan={(val) =>
+                          sendCommand({ type: 'set_pan', target: 'bus', id: bus.id, value: val })
+                        }
+                      />
+                    );
+                  })}
               </div>
 
               {/* Pinned MASTER STEREO L/R Strip */}
@@ -463,7 +496,9 @@ export const App: React.FC = () => {
                   name="MAIN L/R"
                   on={state.stereo.on}
                   fader={state.stereo.fader}
+                  savedFader={savedState?.stereo.fader}
                   pan={state.stereo.pan}
+                  savedPan={savedState?.stereo.pan}
                   meter={state.stereo.meterOut}
                   selected={false}
                   accentColor="rose"
@@ -489,7 +524,11 @@ export const App: React.FC = () => {
         )}
 
         {workspaceView === 'channel-overview' && (
-          <SingleDualChannelView state={state} sendCommand={sendCommand} />
+          <SingleDualChannelView
+            state={state}
+            savedState={savedState}
+            sendCommand={sendCommand}
+          />
         )}
 
         {(workspaceView === 'effects-geq' ||

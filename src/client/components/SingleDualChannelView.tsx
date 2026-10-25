@@ -7,14 +7,40 @@ import { InteractiveEQ } from './InteractiveEQ';
 
 interface SingleDualChannelViewProps {
   state: MixerState;
+  savedState?: MixerState | null;
   sendCommand: (cmd: ClientCommand) => void;
 }
 
+const resolveReset = (current: number, saved: number | undefined, factoryDefault: number): number => {
+  if (saved !== undefined && current !== saved) {
+    return saved;
+  }
+  return factoryDefault;
+};
+
+const handleSliderWheel = (
+  e: React.WheelEvent<HTMLInputElement>,
+  current: number,
+  min: number,
+  max: number,
+  step: number,
+  onChange: (val: number) => void
+) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const dir = e.deltaY < 0 ? 1 : -1;
+  const next = Math.max(min, Math.min(max, current + dir * step));
+  if (next !== current) {
+    onChange(next);
+  }
+};
+
 const FullChannelColumn: React.FC<{
   ch: InputChannelState;
+  savedCh?: InputChannelState;
   isSelected: boolean;
   sendCommand: (cmd: ClientCommand) => void;
-}> = ({ ch, isSelected, sendCommand }) => {
+}> = ({ ch, savedCh, isSelected, sendCommand }) => {
   const compRatioLabel = COMP_RATIOS[ch.comp.ratio] ?? '2:1';
 
   return (
@@ -32,7 +58,9 @@ const FullChannelColumn: React.FC<{
           on={ch.on}
           solo={ch.solo}
           fader={ch.fader}
+          savedFader={savedCh?.fader}
           pan={ch.pan}
+          savedPan={savedCh?.pan}
           meter={ch.meterOut || ch.meterIn}
           selected={isSelected}
           onSelect={() => sendCommand({ type: 'select_channel', id: ch.id })}
@@ -81,7 +109,17 @@ const FullChannelColumn: React.FC<{
             <InOutMeterBridge meterIn={ch.meterIn} meterOut={ch.meterOut} grDb={ch.grDb} />
           </div>
           <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-2.5 flex flex-col gap-1.5">
-            <div className="flex justify-between text-[10px] font-mono text-slate-400">
+            <div
+              onDoubleClick={() =>
+                sendCommand({
+                  type: 'set_att',
+                  id: ch.id,
+                  value: resolveReset(ch.att, savedCh?.att, 0),
+                })
+              }
+              title="Doppio click: ripristina valore memorizzato / 0.0 dB"
+              className="flex justify-between text-[10px] font-mono text-slate-400 cursor-pointer select-none"
+            >
               <span>ATTENUATOR</span>
               <span className="text-cyan-300">{(ch.att / 10).toFixed(1)} dB</span>
             </div>
@@ -93,19 +131,42 @@ const FullChannelColumn: React.FC<{
               onChange={(e) =>
                 sendCommand({ type: 'set_att', id: ch.id, value: Number(e.target.value) })
               }
-              onDoubleClick={() => sendCommand({ type: 'set_att', id: ch.id, value: 0 })}
+              onWheel={(e) =>
+                handleSliderWheel(e, ch.att, -360, 180, 5, (val) =>
+                  sendCommand({ type: 'set_att', id: ch.id, value: val })
+                )
+              }
+              onDoubleClick={() =>
+                sendCommand({
+                  type: 'set_att',
+                  id: ch.id,
+                  value: resolveReset(ch.att, savedCh?.att, 0),
+                })
+              }
               className="w-full accent-cyan-400 cursor-pointer"
             />
-            <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-1">
+            <div
+              onDoubleClick={() =>
+                sendCommand({
+                  type: 'set_pan',
+                  target: 'ch',
+                  id: ch.id,
+                  value: resolveReset(ch.pan, savedCh?.pan, 0),
+                })
+              }
+              title="Doppio click: ripristina Pan memorizzato / Center"
+              className="flex justify-between text-[10px] font-mono text-slate-400 mt-1 cursor-pointer select-none"
+            >
               <span>PAN</span>
               <span className="text-slate-200">{formatPan(ch.pan)}</span>
             </div>
           </div>
         </div>
 
-        {/* 2. Interactive 4-Band EQ with Pre/Post RTA Overlay */}
+        {/* 2. Interactive 4-Band EQ */}
         <InteractiveEQ
           eq={ch.eq}
+          savedEq={savedCh?.eq}
           meterIn={ch.meterIn}
           meterOut={ch.meterOut}
           grDb={ch.grDb}
@@ -133,8 +194,18 @@ const FullChannelColumn: React.FC<{
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_gate',
+                    id: ch.id,
+                    param: 'threshold',
+                    value: resolveReset(ch.gate.threshold, savedCh?.gate.threshold, -260),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>THRESH</span>
                   <span className="text-slate-200">{(ch.gate.threshold / 10).toFixed(1)}dB</span>
                 </div>
@@ -151,11 +222,26 @@ const FullChannelColumn: React.FC<{
                       value: Number(e.target.value),
                     })
                   }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.gate.threshold, -540, 0, 5, (val) =>
+                      sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
+                    )
+                  }
                   className="w-full accent-amber-400 cursor-pointer"
                 />
               </div>
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_gate',
+                    id: ch.id,
+                    param: 'range',
+                    value: resolveReset(ch.gate.range, savedCh?.gate.range, -560),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>RANGE</span>
                   <span className="text-slate-200">{(ch.gate.range / 10).toFixed(1)}dB</span>
                 </div>
@@ -172,11 +258,26 @@ const FullChannelColumn: React.FC<{
                       value: Number(e.target.value),
                     })
                   }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.gate.range, -700, 0, 5, (val) =>
+                      sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
+                    )
+                  }
                   className="w-full accent-amber-400 cursor-pointer"
                 />
               </div>
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_gate',
+                    id: ch.id,
+                    param: 'attack',
+                    value: resolveReset(ch.gate.attack, savedCh?.gate.attack, 10),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>ATTACK</span>
                   <span className="text-slate-200">{ch.gate.attack}</span>
                 </div>
@@ -193,11 +294,26 @@ const FullChannelColumn: React.FC<{
                       value: Number(e.target.value),
                     })
                   }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.gate.attack, 0, 120, 1, (val) =>
+                      sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
+                    )
+                  }
                   className="w-full accent-amber-400 cursor-pointer"
                 />
               </div>
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_gate',
+                    id: ch.id,
+                    param: 'decay',
+                    value: resolveReset(ch.gate.decay, savedCh?.gate.decay, 60),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>DECAY</span>
                   <span className="text-slate-200">{ch.gate.decay}</span>
                 </div>
@@ -213,6 +329,11 @@ const FullChannelColumn: React.FC<{
                       param: 'decay',
                       value: Number(e.target.value),
                     })
+                  }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.gate.decay, 0, 159, 1, (val) =>
+                      sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
+                    )
                   }
                   className="w-full accent-amber-400 cursor-pointer"
                 />
@@ -242,8 +363,19 @@ const FullChannelColumn: React.FC<{
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_comp',
+                    target: 'ch',
+                    id: ch.id,
+                    param: 'threshold',
+                    value: resolveReset(ch.comp.threshold, savedCh?.comp.threshold, -80),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>THRESH</span>
                   <span className="text-slate-200">{(ch.comp.threshold / 10).toFixed(1)}dB</span>
                 </div>
@@ -261,11 +393,33 @@ const FullChannelColumn: React.FC<{
                       value: Number(e.target.value),
                     })
                   }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.comp.threshold, -540, 0, 5, (val) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: ch.id,
+                        param: 'threshold',
+                        value: val,
+                      })
+                    )
+                  }
                   className="w-full accent-cyan-400 cursor-pointer"
                 />
               </div>
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_comp',
+                    target: 'ch',
+                    id: ch.id,
+                    param: 'ratio',
+                    value: resolveReset(ch.comp.ratio, savedCh?.comp.ratio, 4),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>RATIO</span>
                   <span className="text-cyan-300 font-bold">{compRatioLabel}</span>
                 </div>
@@ -283,11 +437,33 @@ const FullChannelColumn: React.FC<{
                       value: Number(e.target.value),
                     })
                   }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.comp.ratio, 0, 15, 1, (val) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: ch.id,
+                        param: 'ratio',
+                        value: val,
+                      })
+                    )
+                  }
                   className="w-full accent-cyan-400 cursor-pointer"
                 />
               </div>
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_comp',
+                    target: 'ch',
+                    id: ch.id,
+                    param: 'gain',
+                    value: resolveReset(ch.comp.gain, savedCh?.comp.gain, 0),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / 0.0 dB"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>GAIN</span>
                   <span className="text-emerald-300">+{(ch.comp.gain / 10).toFixed(1)}dB</span>
                 </div>
@@ -305,11 +481,33 @@ const FullChannelColumn: React.FC<{
                       value: Number(e.target.value),
                     })
                   }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.comp.gain, 0, 180, 5, (val) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: ch.id,
+                        param: 'gain',
+                        value: val,
+                      })
+                    )
+                  }
                   className="w-full accent-emerald-400 cursor-pointer"
                 />
               </div>
-              <div>
-                <div className="flex justify-between text-slate-400">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_comp',
+                    target: 'ch',
+                    id: ch.id,
+                    param: 'release',
+                    value: resolveReset(ch.comp.release, savedCh?.comp.release, 45),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / default"
+              >
+                <div className="flex justify-between text-slate-400 cursor-pointer select-none">
                   <span>RELEASE</span>
                   <span className="text-slate-200">{ch.comp.release}</span>
                 </div>
@@ -326,6 +524,17 @@ const FullChannelColumn: React.FC<{
                       param: 'release',
                       value: Number(e.target.value),
                     })
+                  }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, ch.comp.release, 0, 159, 1, (val) =>
+                      sendCommand({
+                        type: 'set_comp',
+                        target: 'ch',
+                        id: ch.id,
+                        param: 'release',
+                        value: val,
+                      })
+                    )
                   }
                   className="w-full accent-cyan-400 cursor-pointer"
                 />
@@ -345,20 +554,31 @@ const FullChannelColumn: React.FC<{
               {ch.auxSends.map((aux, idx) => (
                 <div
                   key={idx}
-                  className="bg-slate-900/80 border border-slate-800 rounded p-1.5 flex flex-col items-center gap-1"
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_aux_send',
+                      chId: ch.id,
+                      auxId: idx + 1,
+                      param: 'level',
+                      value: resolveReset(aux.level, savedCh?.auxSends[idx]?.level, 823),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / 0.0 dB"
+                  className="bg-slate-900/80 border border-slate-800 rounded p-1.5 flex flex-col items-center gap-1 cursor-pointer select-none"
                 >
                   <div className="flex items-center justify-between w-full text-[9px] font-mono">
                     <span className="text-amber-300 font-bold">A{idx + 1}</span>
                     <button
-                      onClick={() =>
+                      onClick={(e) => {
+                        e.stopPropagation();
                         sendCommand({
                           type: 'set_aux_send',
                           chId: ch.id,
                           auxId: idx + 1,
                           param: 'pre',
                           value: !aux.pre,
-                        })
-                      }
+                        });
+                      }}
                       className="text-cyan-300 cursor-pointer"
                     >
                       {aux.pre ? 'PRE' : 'PST'}
@@ -377,6 +597,17 @@ const FullChannelColumn: React.FC<{
                         param: 'level',
                         value: Number(e.target.value),
                       })
+                    }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, aux.level, 0, 1023, 12, (val) =>
+                        sendCommand({
+                          type: 'set_aux_send',
+                          chId: ch.id,
+                          auxId: idx + 1,
+                          param: 'level',
+                          value: val,
+                        })
+                      )
                     }
                     className="w-full accent-amber-400 cursor-pointer"
                   />
@@ -459,14 +690,18 @@ const FullChannelColumn: React.FC<{
 
 export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
   state,
+  savedState,
   sendCommand,
 }) => {
   const selId = state.selectedChannel;
   // Determine adjacent odd/even stereo pair channel (e.g. Ch 1 & Ch 2, Ch 3 & Ch 4)
   const baseOddId = selId % 2 === 1 ? selId : selId - 1;
   const primaryCh = state.channels[selId - 1] ?? state.channels[0];
+  const savedPrimaryCh = savedState?.channels[selId - 1] ?? savedState?.channels[0];
   const leftCh = state.channels[baseOddId - 1] ?? state.channels[0];
+  const savedLeftCh = savedState?.channels[baseOddId - 1] ?? savedState?.channels[0];
   const rightCh = state.channels[baseOddId] ?? state.channels[1];
+  const savedRightCh = savedState?.channels[baseOddId] ?? savedState?.channels[1];
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden">
@@ -530,16 +765,23 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
       {/* Main Single or Side-by-Side Dual Channel Deck */}
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 overflow-y-auto">
         {!state.dualChannelView ? (
-          <FullChannelColumn ch={primaryCh} isSelected={true} sendCommand={sendCommand} />
+          <FullChannelColumn
+            ch={primaryCh}
+            savedCh={savedPrimaryCh}
+            isSelected={true}
+            sendCommand={sendCommand}
+          />
         ) : (
           <>
             <FullChannelColumn
               ch={leftCh}
+              savedCh={savedLeftCh}
               isSelected={state.selectedChannel === leftCh.id}
               sendCommand={sendCommand}
             />
             <FullChannelColumn
               ch={rightCh}
+              savedCh={savedRightCh}
               isSelected={state.selectedChannel === rightCh.id}
               sendCommand={sendCommand}
             />

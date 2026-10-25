@@ -6,10 +6,39 @@ import { InteractiveEQ } from './InteractiveEQ';
 
 interface ChannelStripPanelProps {
   channel: InputChannelState;
+  savedChannel?: InputChannelState;
   sendCommand: (cmd: ClientCommand) => void;
 }
 
-export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, sendCommand }) => {
+const resolveReset = (current: number, saved: number | undefined, factoryDefault: number): number => {
+  if (saved !== undefined && current !== saved) {
+    return saved;
+  }
+  return factoryDefault;
+};
+
+const handleSliderWheel = (
+  e: React.WheelEvent<HTMLInputElement>,
+  current: number,
+  min: number,
+  max: number,
+  step: number,
+  onChange: (val: number) => void
+) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const dir = e.deltaY < 0 ? 1 : -1;
+  const next = Math.max(min, Math.min(max, current + dir * step));
+  if (next !== current) {
+    onChange(next);
+  }
+};
+
+export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
+  channel,
+  savedChannel,
+  sendCommand,
+}) => {
   const [activeTab, setActiveTab] = useState<'eq' | 'dyn' | 'aux' | 'routing'>('eq');
 
   const compRatioLabel = COMP_RATIOS[channel.comp.ratio] ?? '2:1';
@@ -48,7 +77,17 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
           </button>
 
           {/* Digital Attenuator (-96..+18 dB) */}
-          <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-md px-2 py-1">
+          <div
+            onDoubleClick={() =>
+              sendCommand({
+                type: 'set_att',
+                id: channel.id,
+                value: resolveReset(channel.att, savedChannel?.att, 0),
+              })
+            }
+            title="Doppio click: ripristina valore memorizzato / 0.0 dB · Rotella mouse: regola"
+            className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-md px-2 py-1 select-none cursor-pointer"
+          >
             <span className="text-[10px] font-mono text-slate-400">ATT</span>
             <input
               type="range"
@@ -58,7 +97,11 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
               onChange={(e) =>
                 sendCommand({ type: 'set_att', id: channel.id, value: Number(e.target.value) })
               }
-              onDoubleClick={() => sendCommand({ type: 'set_att', id: channel.id, value: 0 })}
+              onWheel={(e) =>
+                handleSliderWheel(e, channel.att, -360, 180, 5, (val) =>
+                  sendCommand({ type: 'set_att', id: channel.id, value: val })
+                )
+              }
               className="w-16 accent-cyan-400 h-1.5 bg-slate-800 rounded cursor-pointer"
             />
             <span className="text-[10px] font-mono text-slate-200 w-12 text-right">
@@ -67,7 +110,18 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
           </div>
 
           {/* Pan Control */}
-          <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-md px-2 py-1">
+          <div
+            onDoubleClick={() =>
+              sendCommand({
+                type: 'set_pan',
+                target: 'ch',
+                id: channel.id,
+                value: resolveReset(channel.pan, savedChannel?.pan, 0),
+              })
+            }
+            title="Doppio click: ripristina Pan memorizzato / Center · Rotella mouse: regola"
+            className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-md px-2 py-1 select-none cursor-pointer"
+          >
             <span className="text-[10px] font-mono text-slate-400">PAN</span>
             <input
               type="range"
@@ -82,8 +136,10 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                   value: Number(e.target.value),
                 })
               }
-              onDoubleClick={() =>
-                sendCommand({ type: 'set_pan', target: 'ch', id: channel.id, value: 0 })
+              onWheel={(e) =>
+                handleSliderWheel(e, channel.pan, -63, 63, 1, (val) =>
+                  sendCommand({ type: 'set_pan', target: 'ch', id: channel.id, value: val })
+                )
               }
               className="w-16 accent-cyan-400 h-1.5 bg-slate-800 rounded cursor-pointer"
             />
@@ -96,7 +152,7 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
         {/* Section Sub-Navigation Tabs */}
         <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
           {[
-            { id: 'eq', label: '📊 EQ + RTA' },
+            { id: 'eq', label: '📊 4-BAND EQ' },
             { id: 'dyn', label: '🎛️ GATE & COMP' },
             { id: 'aux', label: '🎚️ AUX 1-8' },
             { id: 'routing', label: '🔀 ROUTING & DELAY' },
@@ -116,10 +172,11 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
         </div>
       </div>
 
-      {/* TAB 1: 4-Band Parametric EQ with Live Dual Pre/Post RTA Overlay */}
+      {/* TAB 1: 4-Band Parametric EQ with Live IN/OUT/GR Level Bridge */}
       {activeTab === 'eq' && (
         <InteractiveEQ
           eq={channel.eq}
+          savedEq={savedChannel?.eq}
           meterIn={channel.meterIn}
           meterOut={channel.meterOut}
           grDb={channel.grDb}
@@ -170,8 +227,18 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_gate',
+                      id: channel.id,
+                      param: 'threshold',
+                      value: resolveReset(channel.gate.threshold, savedChannel?.gate.threshold, -260),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>THRESHOLD</span>
                     <span className="text-slate-200">{(channel.gate.threshold / 10).toFixed(1)} dB</span>
                   </div>
@@ -188,12 +255,27 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.gate.threshold, -540, 0, 5, (val) =>
+                        sendCommand({ type: 'set_gate', id: channel.id, param: 'threshold', value: val })
+                      )
+                    }
                     className="w-full accent-amber-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_gate',
+                      id: channel.id,
+                      param: 'range',
+                      value: resolveReset(channel.gate.range, savedChannel?.gate.range, -560),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>RANGE</span>
                     <span className="text-slate-200">{(channel.gate.range / 10).toFixed(1)} dB</span>
                   </div>
@@ -210,12 +292,27 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.gate.range, -700, 0, 5, (val) =>
+                        sendCommand({ type: 'set_gate', id: channel.id, param: 'range', value: val })
+                      )
+                    }
                     className="w-full accent-amber-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_gate',
+                      id: channel.id,
+                      param: 'attack',
+                      value: resolveReset(channel.gate.attack, savedChannel?.gate.attack, 10),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>ATTACK</span>
                     <span className="text-slate-200">{channel.gate.attack}</span>
                   </div>
@@ -232,12 +329,27 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.gate.attack, 0, 120, 1, (val) =>
+                        sendCommand({ type: 'set_gate', id: channel.id, param: 'attack', value: val })
+                      )
+                    }
                     className="w-full accent-amber-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_gate',
+                      id: channel.id,
+                      param: 'decay',
+                      value: resolveReset(channel.gate.decay, savedChannel?.gate.decay, 60),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>DECAY</span>
                     <span className="text-slate-200">{channel.gate.decay}</span>
                   </div>
@@ -253,6 +365,11 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         param: 'decay',
                         value: Number(e.target.value),
                       })
+                    }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.gate.decay, 0, 159, 1, (val) =>
+                        sendCommand({ type: 'set_gate', id: channel.id, param: 'decay', value: val })
+                      )
                     }
                     className="w-full accent-amber-400 cursor-pointer"
                   />
@@ -287,8 +404,19 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_comp',
+                      target: 'ch',
+                      id: channel.id,
+                      param: 'threshold',
+                      value: resolveReset(channel.comp.threshold, savedChannel?.comp.threshold, -80),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>THRESHOLD</span>
                     <span className="text-slate-200">{(channel.comp.threshold / 10).toFixed(1)} dB</span>
                   </div>
@@ -306,12 +434,34 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.comp.threshold, -540, 0, 5, (val) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'threshold',
+                          value: val,
+                        })
+                      )
+                    }
                     className="w-full accent-cyan-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_comp',
+                      target: 'ch',
+                      id: channel.id,
+                      param: 'ratio',
+                      value: resolveReset(channel.comp.ratio, savedChannel?.comp.ratio, 4),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default (2.5:1)"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>RATIO</span>
                     <span className="text-cyan-300 font-bold">{compRatioLabel}</span>
                   </div>
@@ -329,12 +479,34 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.comp.ratio, 0, 15, 1, (val) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'ratio',
+                          value: val,
+                        })
+                      )
+                    }
                     className="w-full accent-cyan-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_comp',
+                      target: 'ch',
+                      id: channel.id,
+                      param: 'gain',
+                      value: resolveReset(channel.comp.gain, savedChannel?.comp.gain, 0),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / 0.0 dB"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>MAKEUP GAIN</span>
                     <span className="text-emerald-300">+{(channel.comp.gain / 10).toFixed(1)} dB</span>
                   </div>
@@ -352,12 +524,34 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.comp.gain, 0, 180, 5, (val) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'gain',
+                          value: val,
+                        })
+                      )
+                    }
                     className="w-full accent-emerald-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_comp',
+                      target: 'ch',
+                      id: channel.id,
+                      param: 'attack',
+                      value: resolveReset(channel.comp.attack, savedChannel?.comp.attack, 25),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>ATTACK</span>
                     <span className="text-slate-200">{channel.comp.attack}</span>
                   </div>
@@ -375,12 +569,34 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.comp.attack, 0, 120, 1, (val) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'attack',
+                          value: val,
+                        })
+                      )
+                    }
                     className="w-full accent-cyan-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_comp',
+                      target: 'ch',
+                      id: channel.id,
+                      param: 'release',
+                      value: resolveReset(channel.comp.release, savedChannel?.comp.release, 45),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>RELEASE</span>
                     <span className="text-slate-200">{channel.comp.release}</span>
                   </div>
@@ -398,12 +614,34 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.comp.release, 0, 159, 1, (val) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'release',
+                          value: val,
+                        })
+                      )
+                    }
                     className="w-full accent-cyan-400 cursor-pointer"
                   />
                 </div>
 
-                <div>
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <div
+                  onDoubleClick={() =>
+                    sendCommand({
+                      type: 'set_comp',
+                      target: 'ch',
+                      id: channel.id,
+                      param: 'knee',
+                      value: resolveReset(channel.comp.knee, savedChannel?.comp.knee, 2),
+                    })
+                  }
+                  title="Doppio click: ripristina valore memorizzato / default"
+                >
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                     <span>KNEE</span>
                     <span className="text-slate-200">
                       {channel.comp.knee === 0 ? 'HARD' : `SOFT ${channel.comp.knee}`}
@@ -422,6 +660,17 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         param: 'knee',
                         value: Number(e.target.value),
                       })
+                    }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, channel.comp.knee, 0, 5, 1, (val) =>
+                        sendCommand({
+                          type: 'set_comp',
+                          target: 'ch',
+                          id: channel.id,
+                          param: 'knee',
+                          value: val,
+                        })
+                      )
                     }
                     className="w-full accent-cyan-400 cursor-pointer"
                   />
@@ -501,18 +750,41 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                         value: Number(e.target.value),
                       })
                     }
+                    onWheel={(e) =>
+                      handleSliderWheel(e, aux.level, 0, 1023, 12, (val) =>
+                        sendCommand({
+                          type: 'set_aux_send',
+                          chId: channel.id,
+                          auxId,
+                          param: 'level',
+                          value: val,
+                        })
+                      )
+                    }
                     onDoubleClick={() =>
                       sendCommand({
                         type: 'set_aux_send',
                         chId: channel.id,
                         auxId,
                         param: 'level',
-                        value: 823,
+                        value: resolveReset(aux.level, savedChannel?.auxSends[idx]?.level, 823),
                       })
                     }
                     className="w-full accent-amber-400 cursor-pointer my-1"
                   />
-                  <span className="text-[10px] font-mono text-slate-300">
+                  <span
+                    onDoubleClick={() =>
+                      sendCommand({
+                        type: 'set_aux_send',
+                        chId: channel.id,
+                        auxId,
+                        param: 'level',
+                        value: resolveReset(aux.level, savedChannel?.auxSends[idx]?.level, 823),
+                      })
+                    }
+                    title="Doppio click: ripristina valore memorizzato / 0.0 dB"
+                    className="text-[10px] font-mono text-slate-300 cursor-pointer select-none"
+                  >
                     {faderToDbString(aux.level)}
                   </span>
                 </div>
@@ -617,8 +889,18 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                   {channel.delayOn ? 'DELAY ON' : 'OFF'}
                 </button>
               </div>
-              <div>
-                <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+              <div
+                onDoubleClick={() =>
+                  sendCommand({
+                    type: 'set_delay',
+                    id: channel.id,
+                    on: channel.delayOn,
+                    time: resolveReset(channel.delayTime, savedChannel?.delayTime, 0),
+                  })
+                }
+                title="Doppio click: ripristina valore memorizzato / 0.0 ms"
+              >
+                <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
                   <span>DELAY TIME</span>
                   <span className="text-slate-200">{(channel.delayTime * 0.45).toFixed(1)} ms</span>
                 </div>
@@ -634,6 +916,16 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({ channel, s
                       on: channel.delayOn,
                       time: Number(e.target.value),
                     })
+                  }
+                  onWheel={(e) =>
+                    handleSliderWheel(e, channel.delayTime, 0, 1000, 5, (val) =>
+                      sendCommand({
+                        type: 'set_delay',
+                        id: channel.id,
+                        on: channel.delayOn,
+                        time: val,
+                      })
+                    )
                   }
                   className="w-full accent-cyan-400 cursor-pointer"
                 />

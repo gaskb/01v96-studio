@@ -8,7 +8,9 @@ interface FaderStripProps {
   on: boolean;
   solo?: boolean;
   fader: number;
+  savedFader?: number;
   pan: number;
+  savedPan?: number;
   meter: number;
   selected: boolean;
   accentColor?: 'cyan' | 'amber' | 'purple' | 'rose';
@@ -27,7 +29,9 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   on,
   solo,
   fader,
+  savedFader,
   pan,
+  savedPan,
   meter,
   selected,
   accentColor = 'cyan',
@@ -41,6 +45,23 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
+
+  const resetFader = () => {
+    // If modified from scene snapshot, restore saved value; if already at saved value, jump to 0.0 dB (823)
+    if (savedFader !== undefined && fader !== savedFader) {
+      onChangeFader(savedFader);
+    } else {
+      onChangeFader(823);
+    }
+  };
+
+  const resetPan = () => {
+    if (savedPan !== undefined && pan !== savedPan) {
+      onChangePan(savedPan);
+    } else {
+      onChangePan(0);
+    }
+  };
 
   const updateFaderFromPointer = (clientY: number) => {
     if (!trackRef.current) return;
@@ -159,19 +180,21 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         </button>
       )}
 
-      {/* Mini Pan Bar */}
+      {/* Mini Pan Bar (Wheel + Double-Click Reset) */}
       <div
         className="w-full mb-1.5 px-0.5"
+        onDoubleClick={resetPan}
         onWheel={(e) => {
           e.preventDefault();
           e.stopPropagation();
           const dir = e.deltaY < 0 ? 1 : -1;
           onChangePan(Math.max(-63, Math.min(63, pan + dir * 2)));
         }}
+        title="Doppio click per ripristinare il Pan salvato / Centro"
       >
-        <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-0.5">
+        <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-0.5 cursor-pointer">
           <span>PAN</span>
-          <span className="text-slate-300">{formatPan(pan)}</span>
+          <span className="text-slate-300 hover:text-cyan-300">{formatPan(pan)}</span>
         </div>
         <input
           type="range"
@@ -179,7 +202,6 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
           max={63}
           value={pan}
           onChange={(e) => onChangePan(Number(e.target.value))}
-          onDoubleClick={() => onChangePan(0)}
           className="w-full h-1 bg-slate-800 rounded accent-cyan-400 cursor-pointer"
         />
       </div>
@@ -209,8 +231,8 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
           ref={trackRef}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onDoubleClick={() => onChangeFader(823)} // Double click -> 0.0 dB
-          title="Doppio click per 0.0 dB"
+          onDoubleClick={resetFader}
+          title="Doppio click per ripristinare il valore salvato nella scena o 0.0 dB"
           className="relative h-full w-7 flex justify-center py-4 cursor-ns-resize touch-none"
         >
           {/* Vertical groove */}
@@ -227,6 +249,14 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
             className="absolute left-0.5 right-0.5 h-[1.5px] bg-cyan-400/50 pointer-events-none"
             style={{ bottom: `calc(${zeroDbPercent}% * 0.86 + 14px)` }}
           />
+
+          {/* Saved Scene Position Ghost Marker */}
+          {savedFader !== undefined && savedFader !== fader && (
+            <div
+              className="absolute left-1 right-1 h-[2px] bg-amber-400/70 pointer-events-none"
+              style={{ bottom: `calc(16px + (100% - 32px) * ${savedFader / 1023})` }}
+            />
+          )}
 
           {/* Metallic Motorized Fader Cap */}
           <div
@@ -258,8 +288,12 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         </div>
       </div>
 
-      {/* Numeric dB Readout */}
-      <div className="w-full py-0.5 bg-[#070a0f] border border-slate-800/80 rounded text-center text-[10px] font-mono text-slate-300">
+      {/* Numeric dB Readout (Double-Click resets fader too!) */}
+      <div
+        onDoubleClick={resetFader}
+        title="Doppio click per ripristinare il valore salvato nella scena o 0.0 dB"
+        className="w-full py-0.5 bg-[#070a0f] hover:bg-slate-900 border border-slate-800/80 rounded text-center text-[10px] font-mono text-slate-300 hover:text-cyan-300 cursor-pointer transition"
+      >
         {faderToDbString(fader)}
       </div>
     </div>
