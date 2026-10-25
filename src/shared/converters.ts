@@ -60,7 +60,8 @@ export function eqIndexToQValue(idx: number): number {
 
 export function formatEqQ(idx: number, band: 'low' | 'lowMid' | 'hiMid' | 'high'): string {
   if (idx === 41) return band === 'low' ? 'L.Shelf' : 'H.Shelf';
-  if (idx === 42) return band === 'low' ? 'HPF' : 'LPF';
+  if (idx === 42) return band === 'low' ? 'HPF' : 'H.Shelf';
+  if (idx === 43) return 'LPF';
   return eqIndexToQValue(idx).toFixed(2);
 }
 

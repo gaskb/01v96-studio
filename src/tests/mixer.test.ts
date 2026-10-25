@@ -7,6 +7,7 @@ import {
   formatPan,
   freqHzToEqIndex,
 } from '../shared/converters.js';
+import { calcBandDbAtFreq } from '../client/components/InteractiveEQ.js';
 import { computePostDspMeter, MixerController } from '../server/mixer-controller.js';
 import {
   buildMeterRequest,
@@ -23,7 +24,7 @@ import {
 } from '../server/protocol.js';
 import { encodeSysExToUsbMidi, UsbMidiStreamParser } from '../server/usb-transport.js';
 
-describe('Yamaha 01V96 Protocol & Converters (v0.2.0)', () => {
+describe('Yamaha 01V96 Protocol & Converters (v0.2.1)', () => {
   it('encodes and decodes signed 28-bit SysEx integers accurately', () => {
     for (const val of [0, 1, 823, 1023, -1, -180, -310, -540, 180]) {
       const bytes = intToDataBytes(val);
@@ -59,6 +60,16 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.0)', () => {
     expect(received[0]).toEqual(meterReq);
   });
 
+  it('renders High Band Q=42 as flat 0 dB High Shelf when Gain=0 (no false LPF roll-off above 5kHz)', () => {
+    // On Yamaha 01V96, High Band Q=42 with Gain=0 dB and LPF off is a High Shelf at 0 dB (flat!)
+    const dbAt10k = calcBandDbAtFreq(10000, 10000, 0, 42, 'high', false, false);
+    expect(dbAt10k).toBe(0);
+
+    // When Gain is +6 dB on High Shelf (Q=42, lpfOn=false), it boosts high frequencies
+    const boostAt15k = calcBandDbAtFreq(15000, 8000, 6, 42, 'high', false, false);
+    expect(boostAt15k).toBeGreaterThan(3);
+  });
+
   it('converts fader, frequency, Q, and pan values properly', () => {
     expect(faderToDbString(0)).toBe('-∞ dB');
     expect(faderToDbString(823)).toBe('0.0 dB');
@@ -68,7 +79,8 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.0)', () => {
     expect(freqHzToEqIndex(hz)).toBe(72);
     expect(eqIndexToQValue(41)).toBeCloseTo(0.707, 2);
     expect(formatEqQ(41, 'low')).toBe('L.Shelf');
-    expect(formatEqQ(42, 'high')).toBe('LPF');
+    expect(formatEqQ(42, 'high')).toBe('H.Shelf');
+    expect(formatEqQ(43, 'high')).toBe('LPF');
     expect(formatPan(0)).toBe('C');
     expect(formatPan(-25)).toBe('L25');
     expect(formatPan(30)).toBe('R30');
@@ -88,7 +100,6 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.0)', () => {
     expect(res.grDb).toBeGreaterThan(0);
     expect(res.meterOut).toBeGreaterThan(0);
 
-    // When channel is muted, meterOut should be 0
     ch.on = false;
     expect(computePostDspMeter(ch, 220).meterOut).toBe(0);
   });
@@ -97,16 +108,13 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.0)', () => {
     const broadcasts: any[] = [];
     const controller = new MixerController((msg) => broadcasts.push(msg));
 
-    // 1. Standard MIDI Program Change (0xC0, 5)
     controller.handleIncomingMidi([0xc0, 5]);
     expect(controller.state.sceneNumber).toBe(5);
 
-    // 2. Universal Scene Recall SysEx (0x7F, 0x10)
     const sceneSysEx = buildSceneRecallSysEx(12);
     controller.handleIncomingMidi(sceneSysEx);
     expect(controller.state.sceneNumber).toBe(12);
 
-    // 3. 01V96 Hardware MemSceneNow (0x0D, dt=4, el=10, p=0)
     const hwSceneSysEx = buildParamChange(MODEL_01V96, 4, 10, 0, 0, 19);
     controller.handleIncomingMidi(hwSceneSysEx);
     expect(controller.state.sceneNumber).toBe(19);
@@ -148,11 +156,9 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.0)', () => {
     });
     expect(controller.state.setup.lcdScreenNo).toBe(7);
 
-    // Incoming Effect parameter change
     controller.handleIncomingMidi(buildParamChange(MODEL_UNIVERSAL, 1, EL_EFFECT, 52, 0, 1));
     expect(controller.state.effects[0].bypass).toBe(true);
 
-    // Incoming GEQ band change
     controller.handleIncomingMidi(buildParamChange(MODEL_UNIVERSAL, 1, EL_GEQ, 8, 0, -40));
     expect(controller.state.geqs[0].bands[4]).toBe(-40);
   });
