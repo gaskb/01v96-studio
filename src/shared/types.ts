@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.2.0';
-export const UI_VERSION = '0.2.0';
-export const API_VERSION = '0.2.0';
+export const APP_VERSION = '0.2.1';
+export const UI_VERSION = '0.2.1';
+export const API_VERSION = '0.2.1';
 
 export type MixerLayer =
   | 'ch1-16'

@@ -73,34 +73,43 @@ export function calcBandDbAtFreq(
   f0: number,
   gainDb: number,
   qIdx: number,
-  bandKey: BandKey
+  bandKey: BandKey,
+  lpfOn = false,
+  hpfOn = false
 ): number {
   const ratio = f / f0;
   if (ratio <= 0) return 0;
 
-  if (bandKey === 'low' && qIdx === 42) {
+  // On Yamaha 01V96:
+  // Low band: Q=0..40 Peaking, Q=41 Low Shelf, Q=42 HPF (or when hpfOn is active at Q=42)
+  if (bandKey === 'low' && (qIdx === 42 || (hpfOn && qIdx > 41))) {
     const order = Math.pow(f0 / f, 4);
     return Math.max(-24, -10 * Math.log10(1 + order));
   }
-  if (bandKey === 'high' && qIdx === 42) {
+  // High band: Q=0..40 Peaking, Q=42 High Shelf, Q=43 LPF!
+  // (Notice Q=42 on High Band is High Shelf, NOT LPF!)
+  if (bandKey === 'high' && qIdx === 43) {
     const order = Math.pow(f / f0, 4);
     return Math.max(-24, -10 * Math.log10(1 + order));
   }
 
   if (Math.abs(gainDb) < 0.05) return 0;
 
+  // Low Shelf (qIdx === 41 on Low)
   if (bandKey === 'low' && qIdx === 41) {
     const x = Math.log2(ratio);
     const s = 1 / (1 + Math.exp(3.2 * x));
     return gainDb * s;
   }
 
-  if (bandKey === 'high' && qIdx === 41) {
+  // High Shelf (qIdx === 41 or 42 on High)
+  if (bandKey === 'high' && (qIdx === 41 || qIdx === 42)) {
     const x = Math.log2(ratio);
     const s = 1 / (1 + Math.exp(-3.2 * x));
     return gainDb * s;
   }
 
+  // Standard Parametric Bell (Peaking EQ)
   const Q = eqIndexToQValue(qIdx);
   const logRatio = Math.log2(ratio);
   const bw = 1 / Math.max(0.15, Q * 0.85);
@@ -129,10 +138,10 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
     return () => clearInterval(id);
   }, [meterIn, meterOut]);
 
-  const width = 680;
-  const height = compact ? 185 : 225;
-  const padX = 38;
-  const padY = 18;
+  const width = 560;
+  const height = compact ? 160 : 180;
+  const padX = 34;
+  const padY = 16;
   const plotW = width - padX * 2;
   const plotH = height - padY * 2;
 
@@ -210,15 +219,14 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
       for (const b of BAND_CONFIG) {
         const state = eq[b.key];
         const f0 = eqIndexToFreqHz(state.freq);
-        eqDb += calcBandDbAtFreq(f, f0, state.gain / 10, state.q, b.key);
+        eqDb += calcBandDbAtFreq(f, f0, state.gain / 10, state.q, b.key, eq.lpfOn, eq.hpfOn);
       }
     }
     const y = dbToY(eqDb);
     combinedPoints.push(`${x.toFixed(1)},${y.toFixed(1)}`);
 
-    // FabFilter Pro-Q style Dual RTA Envelope (Pre-EQ IN vs Post-EQ OUT)
+    // Dual RTA Envelope (Pre-EQ IN vs Post-EQ OUT)
     if (inNorm > 0.01 || outNorm > 0.01) {
-      // Natural pink-noise spectral shape + live organic harmonic movement
       const freqTilt = Math.sin((i / numSamples) * Math.PI * 0.92);
       const ripple =
         Math.sin(i * 0.25 + phaseTick * 0.35) * 0.08 +
@@ -228,7 +236,6 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
       const inY = bottomY - inHeightRatio * plotH * 0.85;
       rtaInPoints.push(`${x.toFixed(1)},${inY.toFixed(1)}`);
 
-      // Post-EQ OUT spectrum is shaped directly by the active EQ curve (eqDb) + output level!
       const eqFactor = eq.on ? (eqDb / 18) * 0.42 : 0;
       const outHeightRatio = Math.max(
         0.02,
@@ -256,13 +263,13 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
   const gridDbs = [-18, -12, -6, 0, 6, 12, 18];
 
   return (
-    <div className="flex flex-col gap-2.5 bg-[#0d1118] border border-slate-800/80 rounded-xl p-3 shadow-inner">
+    <div className="flex flex-col gap-2 bg-[#0d1118] border border-slate-800/80 rounded-xl p-2.5 shadow-inner">
       {/* Header Toolbar + Live IN/OUT Signal Bridge */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
             onClick={() => onChange('on', !eq.on)}
-            className={`px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
+            className={`px-2.5 py-0.5 rounded-md text-xs font-bold tracking-wider uppercase transition-all cursor-pointer ${
               eq.on
                 ? 'bg-emerald-500 text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.5)]'
                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
@@ -297,7 +304,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
               onChange('hiMidG', 0);
               onChange('highG', 0);
             }}
-            className="px-2 py-1 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-700 cursor-pointer"
+            className="px-2 py-0.5 rounded bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-[10px] font-mono border border-slate-700 cursor-pointer"
           >
             FLAT 0dB
           </button>
@@ -319,250 +326,269 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
         </div>
       </div>
 
-      {/* Interactive SVG Frequency Response Curve + Dual RTA Overlay */}
-      <div className="relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f]">
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${width} ${height}`}
-          className="w-full h-auto touch-none select-none"
-          onWheel={(e) => {
-            e.preventDefault();
-            const cfg = BAND_CONFIG.find((b) => b.key === selectedBand)!;
-            const curQ = eq[selectedBand].q;
-            const delta = e.deltaY < 0 ? 1 : -1;
-            const maxQ = selectedBand === 'low' || selectedBand === 'high' ? 42 : 40;
-            const nextQ = Math.max(0, Math.min(maxQ, curQ + delta));
-            onChange(cfg.qParam, nextQ);
-          }}
-        >
-          <defs>
-            <linearGradient id="rtaInGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
-              <stop offset="100%" stopColor="#0284c7" stopOpacity="0.03" />
-            </linearGradient>
-            <linearGradient id="rtaOutGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#059669" stopOpacity="0.06" />
-            </linearGradient>
-          </defs>
+      {/* SIDE-BY-SIDE LAYOUT: Left = SVG Analyzer, Right = 4 Band Parameter Cards (Zero Vertical Scrolling!) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch">
+        {/* Interactive SVG Frequency Response Curve + Dual RTA Overlay */}
+        <div className="lg:col-span-6 relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f] flex items-center">
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${width} ${height}`}
+            className="w-full h-auto touch-none select-none"
+          >
+            <defs>
+              <linearGradient id="rtaInGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
+                <stop offset="100%" stopColor="#0284c7" stopOpacity="0.03" />
+              </linearGradient>
+              <linearGradient id="rtaOutGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#059669" stopOpacity="0.06" />
+              </linearGradient>
+            </defs>
 
-          {/* Horizontal dB Grid Lines */}
-          {gridDbs.map((db) => {
-            const y = dbToY(db);
-            return (
-              <g key={`db-${db}`}>
-                <line
-                  x1={padX}
-                  y1={y}
-                  x2={padX + plotW}
-                  y2={y}
-                  stroke={db === 0 ? '#334155' : '#161f2e'}
-                  strokeWidth={db === 0 ? 1.5 : 1}
-                  strokeDasharray={db === 0 ? undefined : '3 3'}
-                />
-                <text
-                  x={padX - 6}
-                  y={y + 3}
-                  textAnchor="end"
-                  className="fill-slate-500 text-[9px] font-mono"
-                >
-                  {db > 0 ? `+${db}` : db}
-                </text>
-              </g>
-            );
-          })}
+            {/* Horizontal dB Grid Lines */}
+            {gridDbs.map((db) => {
+              const y = dbToY(db);
+              return (
+                <g key={`db-${db}`}>
+                  <line
+                    x1={padX}
+                    y1={y}
+                    x2={padX + plotW}
+                    y2={y}
+                    stroke={db === 0 ? '#334155' : '#161f2e'}
+                    strokeWidth={db === 0 ? 1.5 : 1}
+                    strokeDasharray={db === 0 ? undefined : '3 3'}
+                  />
+                  <text
+                    x={padX - 5}
+                    y={y + 3}
+                    textAnchor="end"
+                    className="fill-slate-500 text-[9px] font-mono"
+                  >
+                    {db > 0 ? `+${db}` : db}
+                  </text>
+                </g>
+              );
+            })}
 
-          {/* Vertical Frequency Grid Lines */}
-          {gridFreqs.map((f) => {
-            const x = freqToX(f);
-            const label = f >= 1000 ? `${f / 1000}k` : `${f}`;
-            return (
-              <g key={`f-${f}`}>
-                <line
-                  x1={x}
-                  y1={padY}
-                  x2={x}
-                  y2={padY + plotH}
-                  stroke="#161f2e"
-                  strokeWidth={1}
-                />
-                <text
-                  x={x}
-                  y={height - 4}
-                  textAnchor="middle"
-                  className="fill-slate-500 text-[9px] font-mono"
-                >
-                  {label}
-                </text>
-              </g>
-            );
-          })}
+            {/* Vertical Frequency Grid Lines */}
+            {gridFreqs.map((f) => {
+              const x = freqToX(f);
+              const label = f >= 1000 ? `${f / 1000}k` : `${f}`;
+              return (
+                <g key={`f-${f}`}>
+                  <line
+                    x1={x}
+                    y1={padY}
+                    x2={x}
+                    y2={padY + plotH}
+                    stroke="#161f2e"
+                    strokeWidth={1}
+                  />
+                  <text
+                    x={x}
+                    y={height - 3}
+                    textAnchor="middle"
+                    className="fill-slate-500 text-[9px] font-mono"
+                  >
+                    {label}
+                  </text>
+                </g>
+              );
+            })}
 
-          {/* Live Dual Spectrum: Shade 1 = PRE-EQ INPUT (Sky Blue) */}
-          {rtaInPath && (
+            {/* Live Dual Spectrum: Shade 1 = PRE-EQ INPUT (Sky Blue) */}
+            {rtaInPath && (
+              <path
+                d={rtaInPath}
+                fill="url(#rtaInGrad)"
+                stroke="#38bdf8"
+                strokeOpacity="0.5"
+                strokeWidth={1}
+              />
+            )}
+
+            {/* Live Dual Spectrum: Shade 2 = POST-EQ OUTPUT (Emerald/Cyan) */}
+            {rtaOutPath && (
+              <path
+                d={rtaOutPath}
+                fill="url(#rtaOutGrad)"
+                stroke="#34d399"
+                strokeOpacity="0.75"
+                strokeWidth={1.2}
+              />
+            )}
+
+            {/* Composite EQ Filter Fill & Curve */}
             <path
-              d={rtaInPath}
-              fill="url(#rtaInGrad)"
-              stroke="#38bdf8"
-              strokeOpacity="0.5"
-              strokeWidth={1}
+              d={fillPath}
+              fill={eq.on ? 'rgba(6, 182, 212, 0.15)' : 'rgba(100, 116, 139, 0.05)'}
             />
-          )}
-
-          {/* Live Dual Spectrum: Shade 2 = POST-EQ OUTPUT (Emerald/Cyan) */}
-          {rtaOutPath && (
             <path
-              d={rtaOutPath}
-              fill="url(#rtaOutGrad)"
-              stroke="#34d399"
-              strokeOpacity="0.75"
-              strokeWidth={1.2}
+              d={linePath}
+              fill="none"
+              stroke={eq.on ? '#22d3ee' : '#475569'}
+              strokeWidth={2.5}
             />
-          )}
 
-          {/* Composite EQ Filter Fill & Curve */}
-          <path
-            d={fillPath}
-            fill={eq.on ? 'rgba(6, 182, 212, 0.15)' : 'rgba(100, 116, 139, 0.05)'}
-          />
-          <path
-            d={linePath}
-            fill="none"
-            stroke={eq.on ? '#22d3ee' : '#475569'}
-            strokeWidth={2.5}
-          />
+            {/* Draggable Band Handles */}
+            {BAND_CONFIG.map((b) => {
+              const state = eq[b.key];
+              const fHz = eqIndexToFreqHz(state.freq);
+              const cx = freqToX(fHz);
+              const cy = dbToY(state.gain / 10);
+              const isSel = selectedBand === b.key;
 
-          {/* Draggable Band Handles */}
-          {BAND_CONFIG.map((b) => {
-            const state = eq[b.key];
-            const fHz = eqIndexToFreqHz(state.freq);
-            const cx = freqToX(fHz);
-            const cy = dbToY(state.gain / 10);
-            const isSel = selectedBand === b.key;
-
-            return (
-              <g
-                key={b.key}
-                className="cursor-grab active:cursor-grabbing"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  setSelectedBand(b.key);
-                  setDraggingBand(b.key);
-                }}
-              >
-                {isSel && (
+              return (
+                <g
+                  key={b.key}
+                  className="cursor-grab active:cursor-grabbing"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    setSelectedBand(b.key);
+                    setDraggingBand(b.key);
+                  }}
+                >
+                  {isSel && (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={13}
+                      fill={b.color}
+                      fillOpacity={0.22}
+                      stroke={b.color}
+                      strokeWidth={1}
+                      strokeDasharray="2 2"
+                    />
+                  )}
                   <circle
                     cx={cx}
                     cy={cy}
-                    r={14}
+                    r={7}
                     fill={b.color}
-                    fillOpacity={0.2}
-                    stroke={b.color}
-                    strokeWidth={1}
-                    strokeDasharray="2 2"
+                    stroke="#090d14"
+                    strokeWidth={2}
                   />
-                )}
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={7.5}
-                  fill={b.color}
-                  stroke="#090d14"
-                  strokeWidth={2}
-                />
-                <text
-                  x={cx}
-                  y={cy - 11}
-                  textAnchor="middle"
-                  fill={b.color}
-                  className="text-[10px] font-mono font-bold pointer-events-none"
-                >
-                  {b.label}
-                </text>
-              </g>
+                  <text
+                    x={cx}
+                    y={cy - 10}
+                    textAnchor="middle"
+                    fill={b.color}
+                    className="text-[9px] font-mono font-bold pointer-events-none"
+                  >
+                    {b.label}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* 4 Band Parameter Cards placed RIGHT BESIDE the Analyzer */}
+        <div
+          className={`lg:col-span-6 grid ${
+            compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'
+          } gap-2 content-between`}
+        >
+          {BAND_CONFIG.map((b) => {
+            const state = eq[b.key];
+            const hz = eqIndexToFreqHz(state.freq);
+            const gainDb = (state.gain / 10).toFixed(1);
+            const maxQ = b.key === 'high' ? 43 : b.key === 'low' ? 42 : 40;
+            const qLabel = formatEqQ(state.q, b.key);
+
+            return (
+              <div
+                key={b.key}
+                onClick={() => setSelectedBand(b.key)}
+                className={`rounded-lg p-2 border transition cursor-pointer flex flex-col justify-between ${
+                  selectedBand === b.key
+                    ? 'bg-slate-900/95 border-slate-600 shadow-md'
+                    : 'bg-slate-900/50 border-slate-800/80 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold font-mono" style={{ color: b.color }}>
+                    ● {b.label}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-300 bg-slate-950 px-1 py-0.5 rounded border border-slate-800">
+                    {Number(gainDb) > 0 ? `+${gainDb}` : gainDb}dB
+                  </span>
+                </div>
+
+                {/* Gain Slider */}
+                <div className="mb-1">
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>GAIN</span>
+                    <span>{gainDb}dB</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    value={state.gain}
+                    onChange={(e) => onChange(b.gParam, Number(e.target.value))}
+                    onDoubleClick={() => onChange(b.gParam, 0)}
+                    className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Frequency Slider */}
+                <div className="mb-1">
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>FREQ</span>
+                    <span className="text-slate-200">{formatFreqHz(hz)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={119}
+                    value={state.freq}
+                    onChange={(e) => onChange(b.fParam, Number(e.target.value))}
+                    className="w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                {/* Q / Filter Mode Slider + Fine [-] [+] Buttons */}
+                <div>
+                  <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono mb-0.5">
+                    <span>Q</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onChange(b.qParam, Math.max(0, state.q - 1));
+                        }}
+                        className="px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="text-cyan-300 min-w-[34px] text-center">{qLabel}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onChange(b.qParam, Math.min(maxQ, state.q + 1));
+                        }}
+                        className="px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxQ}
+                    value={state.q}
+                    onChange={(e) => onChange(b.qParam, Number(e.target.value))}
+                    className="w-full accent-emerald-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                </div>
+              </div>
             );
           })}
-        </svg>
-      </div>
-
-      {/* 4 Band Parameter Cards */}
-      <div className={`grid ${compact ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'} gap-2`}>
-        {BAND_CONFIG.map((b) => {
-          const state = eq[b.key];
-          const hz = eqIndexToFreqHz(state.freq);
-          const gainDb = (state.gain / 10).toFixed(1);
-          const maxQ = b.key === 'low' || b.key === 'high' ? 42 : 40;
-
-          return (
-            <div
-              key={b.key}
-              onClick={() => setSelectedBand(b.key)}
-              className={`rounded-lg p-2 border transition cursor-pointer ${
-                selectedBand === b.key
-                  ? 'bg-slate-900/95 border-slate-600 shadow-md'
-                  : 'bg-slate-900/50 border-slate-800/80 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-bold font-mono" style={{ color: b.color }}>
-                  ● {b.label}
-                </span>
-                <span className="text-[10px] font-mono text-slate-300 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
-                  {Number(gainDb) > 0 ? `+${gainDb}` : gainDb} dB
-                </span>
-              </div>
-
-              {/* Gain Slider */}
-              <div className="mb-1.5">
-                <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-0.5">
-                  <span>GAIN</span>
-                  <span>{gainDb} dB</span>
-                </div>
-                <input
-                  type="range"
-                  min={-180}
-                  max={180}
-                  value={state.gain}
-                  onChange={(e) => onChange(b.gParam, Number(e.target.value))}
-                  onDoubleClick={() => onChange(b.gParam, 0)}
-                  className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Frequency Slider */}
-              <div className="mb-1.5">
-                <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-0.5">
-                  <span>FREQ</span>
-                  <span className="text-slate-200">{formatFreqHz(hz)}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={119}
-                  value={state.freq}
-                  onChange={(e) => onChange(b.fParam, Number(e.target.value))}
-                  className="w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Q / Filter Mode Slider */}
-              <div>
-                <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-0.5">
-                  <span>Q / MODE</span>
-                  <span className="text-cyan-300">{formatEqQ(state.q, b.key)}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={maxQ}
-                  value={state.q}
-                  onChange={(e) => onChange(b.qParam, Number(e.target.value))}
-                  className="w-full accent-emerald-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
-            </div>
-          );
-        })}
+        </div>
       </div>
     </div>
   );
