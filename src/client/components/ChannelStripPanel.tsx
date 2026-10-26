@@ -11,6 +11,8 @@ interface ChannelStripPanelProps {
   controlMode: ControlMode;
   onChangeControlMode: (mode: ControlMode) => void;
   sendCommand: (cmd: ClientCommand) => void;
+  auxNames?: string[];
+  busNames?: string[];
 }
 
 const handleSliderWheel = (
@@ -36,8 +38,12 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
   controlMode,
   onChangeControlMode,
   sendCommand,
+  auxNames,
+  busNames,
 }) => {
   const [activeTab, setActiveTab] = useState<'eq' | 'dyn' | 'aux' | 'routing'>('eq');
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(channel.name);
 
   const compRatioLabel = COMP_RATIOS[channel.comp.ratio] ?? '2:1';
 
@@ -46,8 +52,56 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
       {/* Top Channel Header & Preamp Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2 border-b border-slate-800/80">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="px-3 py-1 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-mono font-bold text-sm">
-            CH {channel.id} — {channel.name}
+          <div
+            onDoubleClick={() => {
+              setNameDraft(channel.name || `CH${channel.id}`);
+              setEditingName(true);
+            }}
+            title={
+              channel.name
+                ? `CH ${channel.id}: ${channel.name} (Doppio click per modificare)`
+                : `CH ${channel.id} (Doppio click per modificare)`
+            }
+            className="px-3 py-1 rounded-lg bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-mono font-bold text-sm cursor-pointer flex items-center gap-1.5"
+          >
+            <span>CH {channel.id} —</span>
+            {editingName ? (
+              <input
+                type="text"
+                maxLength={32}
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={() => {
+                  setEditingName(false);
+                  sendCommand({
+                    type: 'set_name',
+                    target: 'ch',
+                    id: channel.id,
+                    name: nameDraft,
+                  });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setEditingName(false);
+                    sendCommand({
+                      type: 'set_name',
+                      target: 'ch',
+                      id: channel.id,
+                      name: nameDraft,
+                    });
+                  } else if (e.key === 'Escape') {
+                    setNameDraft(channel.name);
+                    setEditingName(false);
+                  }
+                }}
+                className="bg-transparent text-cyan-200 outline-none w-36"
+              />
+            ) : (
+              <span className="truncate max-w-[200px]" title={channel.name}>
+                {channel.name || `CH${channel.id}`}
+              </span>
+            )}
           </div>
 
           {/* Stereo Pair Toggle */}
@@ -1000,7 +1054,12 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                   key={auxId}
                   className="bg-[#0d1118] border border-slate-800 rounded-xl p-2.5 flex flex-col items-center gap-2"
                 >
-                  <span className="text-xs font-mono font-bold text-amber-300">AUX {auxId}</span>
+                  <span
+                    className="text-xs font-mono font-bold text-amber-300 truncate max-w-full"
+                    title={auxNames?.[idx] ? `AUX ${auxId}: ${auxNames[idx]}` : `AUX ${auxId}`}
+                  >
+                    {auxNames?.[idx] || `AUX ${auxId}`}
+                  </span>
                   <div className="flex gap-1 w-full">
                     <button
                       onClick={() =>
@@ -1183,27 +1242,32 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
                   DIRECT OUT {channel.routing.direct ? 'ON' : 'OFF'}
                 </button>
 
-                {channel.routing.bus.map((assigned, bIdx) => (
-                  <button
-                    key={bIdx}
-                    onClick={() =>
-                      sendCommand({
-                        type: 'set_routing',
-                        id: channel.id,
-                        target: 'bus',
-                        busIndex: bIdx,
-                        value: !assigned,
-                      })
-                    }
-                    className={`px-3 py-2 rounded-lg font-mono font-bold text-xs border transition cursor-pointer ${
-                      assigned
-                        ? 'bg-purple-500 text-slate-950 border-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.5)]'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    BUS {bIdx + 1}
-                  </button>
-                ))}
+                {channel.routing.bus.map((assigned, bIdx) => {
+                  const busId = bIdx + 1;
+                  const busName = busNames?.[bIdx] || `BUS ${busId}`;
+                  return (
+                    <button
+                      key={bIdx}
+                      onClick={() =>
+                        sendCommand({
+                          type: 'set_routing',
+                          id: channel.id,
+                          target: 'bus',
+                          busIndex: bIdx,
+                          value: !assigned,
+                        })
+                      }
+                      title={`BUS ${busId}: ${busName}`}
+                      className={`px-3 py-2 rounded-lg font-mono font-bold text-xs border transition cursor-pointer truncate max-w-[140px] ${
+                        assigned
+                          ? 'bg-purple-500 text-slate-950 border-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.5)]'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {busName}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

@@ -42,7 +42,9 @@ const renderWidgetContent = (
   ch: InputChannelState,
   savedCh: InputChannelState | undefined,
   controlMode: ControlMode,
-  sendCommand: (cmd: ClientCommand) => void
+  sendCommand: (cmd: ClientCommand) => void,
+  auxNames?: string[],
+  busNames?: string[]
 ) => {
   switch (id) {
     case 'meter_vertical':
@@ -143,6 +145,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_3_4':
@@ -152,6 +156,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_5_6':
@@ -161,6 +167,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_7_8':
@@ -170,6 +178,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_sends':
@@ -179,6 +189,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'routing':
@@ -188,6 +200,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     default:
@@ -207,6 +221,8 @@ const FullChannelColumn: React.FC<{
   isEditMode: boolean;
   draggedId: string | null;
   dragOverId: string | null;
+  auxNames?: string[];
+  busNames?: string[];
   onUpdateItem: (updated: WidgetLayoutItem) => void;
   onDropOnCell: (id: string, col: number, row: number) => void;
   onDropOnWidget: (targetId: string, e: React.DragEvent) => void;
@@ -225,6 +241,8 @@ const FullChannelColumn: React.FC<{
   isEditMode,
   draggedId,
   dragOverId,
+  auxNames,
+  busNames,
   onUpdateItem,
   onDropOnCell,
   onDropOnWidget,
@@ -265,7 +283,9 @@ const FullChannelColumn: React.FC<{
           onChangePan={(val) =>
             sendCommand({ type: 'set_pan', target: 'ch', id: ch.id, value: val })
           }
-          onRename={(newName) => sendCommand({ type: 'set_name', id: ch.id, name: newName })}
+          onRename={(newName) =>
+            sendCommand({ type: 'set_name', target: 'ch', id: ch.id, name: newName })
+          }
         />
 
         {/* Phase Invert & Pair Buttons */}
@@ -354,7 +374,15 @@ const FullChannelColumn: React.FC<{
                 onDrop={(targetId, e) => onDropOnWidget(targetId, e)}
                 onDragEnd={onDragEnd}
               >
-                {renderWidgetContent(item.id, ch, savedCh, controlMode, sendCommand)}
+                {renderWidgetContent(
+                  item.id,
+                  ch,
+                  savedCh,
+                  controlMode,
+                  sendCommand,
+                  auxNames,
+                  busNames
+                )}
               </ModularWidgetCard>
             );
           })}
@@ -543,6 +571,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             <button
               key={c.id}
               onClick={() => sendCommand({ type: 'select_channel', id: c.id })}
+              title={`CH ${c.id}: ${c.name}`}
               className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition cursor-pointer ${
                 state.selectedChannel === c.id
                   ? 'bg-cyan-400 text-slate-950 shadow-[0_0_8px_rgba(34,211,238,0.5)]'
@@ -557,6 +586,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             <button
               key={c.id}
               onClick={() => sendCommand({ type: 'select_channel', id: c.id })}
+              title={`CH ${c.id}: ${c.name}`}
               className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition cursor-pointer ${
                 state.selectedChannel === c.id
                   ? 'bg-cyan-400 text-slate-950 shadow-[0_0_8px_rgba(34,211,238,0.5)]'
@@ -660,6 +690,8 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             isEditMode={isEditMode}
             draggedId={draggedId}
             dragOverId={dragOverId}
+            auxNames={state.auxes.map((a) => a.name)}
+            busNames={state.buses.map((b) => b.name)}
             onUpdateItem={handleUpdateItem}
             onDropOnCell={handleDropOnCell}
             onDropOnWidget={handleDropOnWidget}
@@ -681,6 +713,8 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               isEditMode={isEditMode}
               draggedId={draggedId}
               dragOverId={dragOverId}
+              auxNames={state.auxes.map((a) => a.name)}
+              busNames={state.buses.map((b) => b.name)}
               onUpdateItem={handleUpdateItem}
               onDropOnCell={handleDropOnCell}
               onDropOnWidget={handleDropOnWidget}
@@ -700,6 +734,8 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               isEditMode={isEditMode}
               draggedId={draggedId}
               dragOverId={dragOverId}
+              auxNames={state.auxes.map((a) => a.name)}
+              busNames={state.buses.map((b) => b.name)}
               onUpdateItem={handleUpdateItem}
               onDropOnCell={handleDropOnCell}
               onDropOnWidget={handleDropOnWidget}

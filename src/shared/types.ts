@@ -160,7 +160,7 @@ export type ClientCommand =
   | { type: 'set_phase'; id: number; value: boolean }
   | { type: 'set_att'; id: number; value: number }
   | { type: 'set_pair'; id: number; value: boolean }
-  | { type: 'set_name'; id: number; name: string }
+  | { type: 'set_name'; target?: 'ch' | 'aux' | 'bus'; id: number; name: string }
   | { type: 'set_eq'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; param: string; value: number | boolean }
   | { type: 'set_gate'; id: number; param: string; value: number | boolean }
   | { type: 'set_comp'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; param: string; value: number | boolean }

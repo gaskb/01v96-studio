@@ -35,6 +35,8 @@ interface SelectedChannelRackProps {
   controlMode: ControlMode;
   onChangeControlMode: (mode: ControlMode) => void;
   sendCommand: (cmd: ClientCommand) => void;
+  auxNames?: string[];
+  busNames?: string[];
 }
 
 const renderWidgetContent = (
@@ -42,7 +44,9 @@ const renderWidgetContent = (
   ch: InputChannelState,
   savedCh: InputChannelState | undefined,
   controlMode: ControlMode,
-  sendCommand: (cmd: ClientCommand) => void
+  sendCommand: (cmd: ClientCommand) => void,
+  auxNames?: string[],
+  busNames?: string[]
 ) => {
   switch (id) {
     case 'meter_vertical':
@@ -143,6 +147,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_3_4':
@@ -152,6 +158,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_5_6':
@@ -161,6 +169,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_7_8':
@@ -170,6 +180,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'aux_sends':
@@ -179,6 +191,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     case 'routing':
@@ -188,6 +202,8 @@ const renderWidgetContent = (
           savedCh={savedCh}
           controlMode={controlMode}
           sendCommand={sendCommand}
+          auxNames={auxNames}
+          busNames={busNames}
         />
       );
     default:
@@ -201,12 +217,16 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
   controlMode,
   onChangeControlMode,
   sendCommand,
+  auxNames,
+  busNames,
 }) => {
   const [layout, setLayout] = useState<ChannelLayoutConfig>(loadStoredLayout);
   const [isEditMode, setIsEditMode] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(channel.name);
 
   const gridCols = layout.gridCols || 24;
   const gridRows = layout.gridRows || 4;
@@ -361,6 +381,8 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
         controlMode={controlMode}
         onChangeControlMode={onChangeControlMode}
         sendCommand={sendCommand}
+        auxNames={auxNames}
+        busNames={busNames}
       />
     );
   }
@@ -371,14 +393,62 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2 bg-[#070a0f] border border-slate-800/90 rounded-xl px-2.5 py-1 shrink-0">
         {/* Left: Selected Channel Info & Quick Toggles */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-0.5">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
-            <span className="text-xs font-mono font-bold text-white tracking-wide">
+          <div
+            onDoubleClick={() => {
+              setNameDraft(channel.name || `CH${channel.id}`);
+              setEditingName(true);
+            }}
+            title={
+              channel.name
+                ? `CH ${channel.id}: ${channel.name} (Doppio click per modificare)`
+                : `CH ${channel.id} (Doppio click per modificare)`
+            }
+            className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-0.5 cursor-pointer max-w-[220px]"
+          >
+            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] shrink-0" />
+            <span className="text-xs font-mono font-bold text-white tracking-wide shrink-0">
               CH {channel.id}
             </span>
-            <span className="text-xs font-mono text-cyan-300 font-semibold border-l border-slate-800 pl-2">
-              {channel.name || `CH${channel.id}`}
-            </span>
+            {editingName ? (
+              <input
+                type="text"
+                maxLength={32}
+                autoFocus
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onBlur={() => {
+                  setEditingName(false);
+                  sendCommand({
+                    type: 'set_name',
+                    target: 'ch',
+                    id: channel.id,
+                    name: nameDraft,
+                  });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setEditingName(false);
+                    sendCommand({
+                      type: 'set_name',
+                      target: 'ch',
+                      id: channel.id,
+                      name: nameDraft,
+                    });
+                  } else if (e.key === 'Escape') {
+                    setNameDraft(channel.name);
+                    setEditingName(false);
+                  }
+                }}
+                className="bg-transparent text-xs font-mono text-cyan-300 font-semibold border-l border-slate-800 pl-2 outline-none w-full"
+              />
+            ) : (
+              <span
+                title={channel.name || `CH${channel.id}`}
+                className="text-xs font-mono text-cyan-300 font-semibold border-l border-slate-800 pl-2 truncate"
+              >
+                {channel.name || `CH${channel.id}`}
+              </span>
+            )}
           </div>
 
           {/* Phase Invert */}
@@ -531,7 +601,15 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
                 onDrop={(targetId, e) => handleDropOnWidget(targetId, e)}
                 onDragEnd={handleDragEnd}
               >
-                {renderWidgetContent(item.id, channel, savedChannel, controlMode, sendCommand)}
+                {renderWidgetContent(
+                  item.id,
+                  channel,
+                  savedChannel,
+                  controlMode,
+                  sendCommand,
+                  auxNames,
+                  busNames
+                )}
               </ModularWidgetCard>
             );
           })}

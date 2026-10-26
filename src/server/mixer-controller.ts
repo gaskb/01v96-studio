@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import {
   ChannelCompState,
   ChannelEQState,
@@ -245,6 +247,77 @@ export class MixerController {
   private effectTitleChars: Map<number, string[]> = new Map();
   private channelNameChars: Map<number, string[]> = new Map();
   private skipNextMeter = false;
+  private labelsFilePath: string =
+    process.env.LABELS_FILE_PATH || path.resolve(process.env.DATA_DIR || process.cwd(), 'data', 'scene-labels.json');
+  private sceneLabelsStore: Record<
+    string,
+    {
+      ch?: Record<number, string>;
+      aux?: Record<number, string>;
+      bus?: Record<number, string>;
+    }
+  > = {};
+
+  private loadSceneLabels(): Record<string, { ch?: Record<number, string>; aux?: Record<number, string>; bus?: Record<number, string> }> {
+    try {
+      if (fs.existsSync(this.labelsFilePath)) {
+        const raw = fs.readFileSync(this.labelsFilePath, 'utf-8');
+        return JSON.parse(raw);
+      }
+    } catch (err) {
+      console.error('Failed to read scene labels:', err);
+    }
+    return {};
+  }
+
+  private saveSceneLabels(): void {
+    try {
+      const dir = path.dirname(this.labelsFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.labelsFilePath, JSON.stringify(this.sceneLabelsStore, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Failed to save scene labels:', err);
+    }
+  }
+
+  public applySceneLabels(sceneNo: number): void {
+    const scKey = String(sceneNo);
+    const labels = this.sceneLabelsStore[scKey];
+    if (!labels) return;
+
+    if (labels.ch) {
+      for (const [idStr, name] of Object.entries(labels.ch)) {
+        const id = Number(idStr);
+        const idx = id - 1;
+        if (this.state.channels[idx] && name) {
+          this.state.channels[idx].name = name;
+          this.broadcastChannelUpdate('ch', id, { name });
+        }
+      }
+    }
+    if (labels.aux) {
+      for (const [idStr, name] of Object.entries(labels.aux)) {
+        const id = Number(idStr);
+        const idx = id - 1;
+        if (this.state.auxes[idx] && name) {
+          this.state.auxes[idx].name = name;
+          this.broadcastChannelUpdate('aux', id, { name });
+        }
+      }
+    }
+    if (labels.bus) {
+      for (const [idStr, name] of Object.entries(labels.bus)) {
+        const id = Number(idStr);
+        const idx = id - 1;
+        if (this.state.buses[idx] && name) {
+          this.state.buses[idx].name = name;
+          this.broadcastChannelUpdate('bus', id, { name });
+        }
+      }
+    }
+  }
 
   constructor(broadcastCallback: (msg: unknown) => void) {
     this.broadcastCallback = broadcastCallback;
@@ -289,6 +362,9 @@ export class MixerController {
     for (let i = 0; i < 4; i++) {
       this.effectTitleChars.set(i, Array(16).fill(' '));
     }
+
+    this.sceneLabelsStore = this.loadSceneLabels();
+    this.applySceneLabels(this.state.sceneNumber);
 
     this.transport.onMessage((msg) => this.handleIncomingMidi(msg));
     this.transport.onStatusChange((connected) => {
@@ -426,6 +502,7 @@ export class MixerController {
     // 1. Standard MIDI Program Change (0xCn, pgm) -> Scene changed on mixer!
     if (msg.length === 2 && (msg[0] & 0xf0) === 0xc0) {
       this.state.sceneNumber = msg[1];
+      this.applySceneLabels(this.state.sceneNumber);
       this.broadcastPatch({ sceneNumber: this.state.sceneNumber });
       this.scheduleSceneResync();
       return;
@@ -446,6 +523,7 @@ export class MixerController {
     if (modelId === MODEL_UNIVERSAL && dataType === 0x10) {
       const sceneNo = msg.length >= 11 ? ((msg[8] & 0x7f) << 7) | (msg[9] & 0x7f) : msg[8];
       this.state.sceneNumber = sceneNo;
+      this.applySceneLabels(sceneNo);
       this.broadcastPatch({ sceneNumber: sceneNo });
       this.scheduleSceneResync();
       return;
@@ -742,9 +820,19 @@ export class MixerController {
         const chars = this.channelNameChars.get(channel) ?? ['C', 'H', ' ', ' '];
         chars[param] = val > 31 ? String.fromCharCode(val) : ' ';
         this.channelNameChars.set(channel, chars);
-        const name = chars.join('').trim() || `CH${channel + 1}`;
-        this.state.channels[channel].name = name;
-        this.broadcastChannelUpdate('ch', channel + 1, { name });
+        const shortName = chars.join('').trim() || `CH${channel + 1}`;
+        const currentName = this.state.channels[channel].name;
+        const scKey = String(this.state.sceneNumber);
+        const storedName = this.sceneLabelsStore[scKey]?.ch?.[channel + 1];
+
+        if (storedName) {
+          // Keep stored custom name for this scene
+        } else if (currentName && currentName !== `CH${channel + 1}` && currentName.startsWith(shortName)) {
+          // Keep rich name if it matches short name prefix
+        } else {
+          this.state.channels[channel].name = shortName;
+          this.broadcastChannelUpdate('ch', channel + 1, { name: shortName });
+        }
       }
       // Omni Out Patch (dt=2, el=6, p=0)
       else if (dataType === 2 && element === 6 && param === 0 && channel >= 0 && channel < 4) {
@@ -772,6 +860,7 @@ export class MixerController {
       // Scene Memory Now / Recall on Mixer (dt=4, el=10, p=0 or p=1)
       else if (dataType === 4 && element === 10 && (param === 0 || param === 1)) {
         this.state.sceneNumber = val;
+        this.applySceneLabels(val);
         this.broadcastPatch({ sceneNumber: val });
         this.scheduleSceneResync();
       }
@@ -898,16 +987,40 @@ export class MixerController {
       }
 
       case 'set_name': {
+        const target = cmd.target ?? 'ch';
         const ch = cmd.id - 1;
-        if (this.state.channels[ch]) {
-          const clean = cmd.name.slice(0, 4).padEnd(4, ' ');
-          this.state.channels[ch].name = cmd.name.slice(0, 4).trim() || `CH${cmd.id}`;
+        const scKey = String(this.state.sceneNumber);
+        if (!this.sceneLabelsStore[scKey]) {
+          this.sceneLabelsStore[scKey] = {};
+        }
+
+        if (target === 'ch' && this.state.channels[ch]) {
+          const cleanName = cmd.name.trim().slice(0, 32) || `CH${cmd.id}`;
+          this.state.channels[ch].name = cleanName;
+          const cleanSysEx = cleanName.slice(0, 4).padEnd(4, ' ');
           for (let p = 0; p < 4; p++) {
             await this.transport.sendSysEx(
-              buildParamChange(MODEL_01V96, 2, 4, p, ch, clean.charCodeAt(p))
+              buildParamChange(MODEL_01V96, 2, 4, p, ch, cleanSysEx.charCodeAt(p))
             );
           }
-          this.broadcastChannelUpdate('ch', cmd.id, { name: this.state.channels[ch].name });
+          if (!this.sceneLabelsStore[scKey].ch) this.sceneLabelsStore[scKey].ch = {};
+          this.sceneLabelsStore[scKey].ch![cmd.id] = cleanName;
+          this.broadcastChannelUpdate('ch', cmd.id, { name: cleanName });
+          this.saveSceneLabels();
+        } else if (target === 'aux' && this.state.auxes[ch]) {
+          const cleanName = cmd.name.trim().slice(0, 32) || `AUX ${cmd.id}`;
+          this.state.auxes[ch].name = cleanName;
+          if (!this.sceneLabelsStore[scKey].aux) this.sceneLabelsStore[scKey].aux = {};
+          this.sceneLabelsStore[scKey].aux![cmd.id] = cleanName;
+          this.broadcastChannelUpdate('aux', cmd.id, { name: cleanName });
+          this.saveSceneLabels();
+        } else if (target === 'bus' && this.state.buses[ch]) {
+          const cleanName = cmd.name.trim().slice(0, 32) || `BUS ${cmd.id}`;
+          this.state.buses[ch].name = cleanName;
+          if (!this.sceneLabelsStore[scKey].bus) this.sceneLabelsStore[scKey].bus = {};
+          this.sceneLabelsStore[scKey].bus![cmd.id] = cleanName;
+          this.broadcastChannelUpdate('bus', cmd.id, { name: cleanName });
+          this.saveSceneLabels();
         }
         break;
       }
@@ -1081,6 +1194,7 @@ export class MixerController {
         this.state.sceneNumber = pgm;
         await this.transport.sendSysEx(buildSceneRecallSysEx(pgm));
         await this.transport.sendSysEx([0xc0, pgm]);
+        this.applySceneLabels(pgm);
         this.broadcastPatch({ sceneNumber: pgm });
         this.scheduleSceneResync();
         break;
@@ -1101,6 +1215,28 @@ export class MixerController {
         this.state.sceneNumber = pgm;
         this.dirtyParams.clear();
         this.state.savedChannels = structuredClone(this.state.channels);
+
+        // Snapshot current names into sceneLabelsStore for this scene
+        const scKey = String(pgm);
+        const chMap: Record<number, string> = {};
+        for (const c of this.state.channels) {
+          chMap[c.id] = c.name;
+        }
+        const auxMap: Record<number, string> = {};
+        for (const a of this.state.auxes) {
+          auxMap[a.id] = a.name;
+        }
+        const busMap: Record<number, string> = {};
+        for (const b of this.state.buses) {
+          busMap[b.id] = b.name;
+        }
+        this.sceneLabelsStore[scKey] = {
+          ch: chMap,
+          aux: auxMap,
+          bus: busMap,
+        };
+        this.saveSceneLabels();
+
         this.broadcastState();
         break;
       }

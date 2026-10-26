@@ -207,4 +207,117 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.1)', () => {
     // Shift + Double-click forces factory default (0.0 dB)
     expect(resolveResetValue(45, -60, 0, true)).toBe(0);
   });
+
+  it('supports rich custom labels for channels, auxes, and buses linked to scenes', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const testLabelsPath = path.resolve(process.cwd(), 'data', `test-labels-${Date.now()}.json`);
+    process.env.LABELS_FILE_PATH = testLabelsPath;
+
+    try {
+      const broadcasts: any[] = [];
+      const controller = new MixerController((msg) => broadcasts.push(msg));
+
+      // 1. Rename CH 1 to rich name "Mic rosso (Lead Vocal)"
+      await controller.handleClientCommand({
+        type: 'set_name',
+        target: 'ch',
+        id: 1,
+        name: 'Mic rosso (Lead Vocal)',
+      });
+      expect(controller.state.channels[0].name).toBe('Mic rosso (Lead Vocal)');
+      expect(broadcasts).toContainEqual(
+        expect.objectContaining({
+          type: 'channel_update',
+          target: 'ch',
+          id: 1,
+          changes: { name: 'Mic rosso (Lead Vocal)' },
+        })
+      );
+
+      // 2. Rename AUX 1 to "to tape"
+      await controller.handleClientCommand({
+        type: 'set_name',
+        target: 'aux',
+        id: 1,
+        name: 'to tape',
+      });
+      expect(controller.state.auxes[0].name).toBe('to tape');
+      expect(broadcasts).toContainEqual(
+        expect.objectContaining({
+          type: 'channel_update',
+          target: 'aux',
+          id: 1,
+          changes: { name: 'to tape' },
+        })
+      );
+
+      // 3. Rename BUS 1 to "Submix Batteria"
+      await controller.handleClientCommand({
+        type: 'set_name',
+        target: 'bus',
+        id: 1,
+        name: 'Submix Batteria',
+      });
+      expect(controller.state.buses[0].name).toBe('Submix Batteria');
+      expect(broadcasts).toContainEqual(
+        expect.objectContaining({
+          type: 'channel_update',
+          target: 'bus',
+          id: 1,
+          changes: { name: 'Submix Batteria' },
+        })
+      );
+
+      // 4. Store current scene as Scene 5
+      await controller.handleClientCommand({
+        type: 'store_scene',
+        sceneNumber: 5,
+        title: 'Rock Band',
+      });
+
+      // 5. Switch to Scene 2 and change name to "Acoustic Guitar"
+      await controller.handleClientCommand({
+        type: 'recall_scene',
+        sceneNumber: 2,
+      });
+      await controller.handleClientCommand({
+        type: 'set_name',
+        target: 'ch',
+        id: 1,
+        name: 'Acoustic Guitar',
+      });
+      expect(controller.state.channels[0].name).toBe('Acoustic Guitar');
+
+      // 6. Recall Scene 5 -> Should restore "Mic rosso (Lead Vocal)", "to tape", and "Submix Batteria"
+      await controller.handleClientCommand({
+        type: 'recall_scene',
+        sceneNumber: 5,
+      });
+      expect(controller.state.channels[0].name).toBe('Mic rosso (Lead Vocal)');
+      expect(controller.state.auxes[0].name).toBe('to tape');
+      expect(controller.state.buses[0].name).toBe('Submix Batteria');
+
+      // 7. Incoming 4-character SysEx ("Mic ") should NOT overwrite "Mic rosso (Lead Vocal)"
+      // Short name SysEx: dt=2, el=4, p=0..3, ch=0
+      controller.handleIncomingMidi(buildParamChange(MODEL_01V96, 2, 4, 0, 0, 'M'.charCodeAt(0)));
+      controller.handleIncomingMidi(buildParamChange(MODEL_01V96, 2, 4, 1, 0, 'i'.charCodeAt(0)));
+      controller.handleIncomingMidi(buildParamChange(MODEL_01V96, 2, 4, 2, 0, 'c'.charCodeAt(0)));
+      controller.handleIncomingMidi(buildParamChange(MODEL_01V96, 2, 4, 3, 0, ' '.charCodeAt(0)));
+
+      expect(controller.state.channels[0].name).toBe('Mic rosso (Lead Vocal)');
+
+      // 8. Persistence file was created and is valid JSON
+      expect(fs.existsSync(testLabelsPath)).toBe(true);
+      const fileData = JSON.parse(fs.readFileSync(testLabelsPath, 'utf-8'));
+      expect(fileData['5'].ch['1']).toBe('Mic rosso (Lead Vocal)');
+      expect(fileData['5'].aux['1']).toBe('to tape');
+      expect(fileData['5'].bus['1']).toBe('Submix Batteria');
+    } finally {
+      if (fs.existsSync(testLabelsPath)) {
+        fs.unlinkSync(testLabelsPath);
+      }
+      delete process.env.LABELS_FILE_PATH;
+    }
+  });
 });

@@ -17,6 +17,8 @@ export interface WidgetCommonProps {
   savedCh?: InputChannelState;
   controlMode: ControlMode;
   sendCommand: (cmd: ClientCommand) => void;
+  auxNames?: string[];
+  busNames?: string[];
 }
 
 /**
@@ -76,6 +78,7 @@ export const WidgetAuxSends: React.FC<WidgetCommonProps> = ({
   ch,
   savedCh,
   sendCommand,
+  auxNames,
 }) => {
   return (
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1.5 flex flex-col gap-1 justify-between h-full select-none shadow-sm">
@@ -90,6 +93,7 @@ export const WidgetAuxSends: React.FC<WidgetCommonProps> = ({
       <div className="grid grid-cols-2 gap-1.5 items-center flex-1">
         {ch.auxSends.map((aux, idx) => {
           const auxId = idx + 1;
+          const auxName = auxNames?.[idx];
           const savedLevel = savedCh?.auxSends[idx]?.level;
           const dbStr = faderToDbString(aux.level).replace(' dB', '');
           return (
@@ -109,11 +113,13 @@ export const WidgetAuxSends: React.FC<WidgetCommonProps> = ({
                   ),
                 })
               }
-              title={`Aux ${auxId}: doppio click per ripristinare`}
+              title={auxName ? `AUX ${auxId} (${auxName}): doppio click per ripristinare` : `AUX ${auxId}: doppio click per ripristinare`}
               className="bg-slate-950/80 border border-slate-850 rounded p-1 flex flex-col items-center gap-0.5 cursor-pointer"
             >
               <div className="flex items-center justify-between w-full text-[9px] font-mono px-0.5">
-                <span className="text-amber-300 font-bold">A{auxId}</span>
+                <span className="text-amber-300 font-bold truncate max-w-[48px]" title={auxName || `AUX ${auxId}`}>
+                  {auxName || `A${auxId}`}
+                </span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -426,6 +432,7 @@ export const WidgetAuxPair: React.FC<WidgetAuxPairProps> = ({
   savedCh,
   sendCommand,
   pairIndex,
+  auxNames,
 }) => {
   const firstIdx = pairIndex * 2;
   const secondIdx = pairIndex * 2 + 1;
@@ -433,8 +440,10 @@ export const WidgetAuxPair: React.FC<WidgetAuxPairProps> = ({
   const secondAux = ch.auxSends[secondIdx];
   const firstId = firstIdx + 1;
   const secondId = secondIdx + 1;
+  const firstName = auxNames?.[firstIdx];
+  const secondName = auxNames?.[secondIdx];
 
-  const renderSingleAux = (aux: typeof firstAux, auxId: number, idx: number) => {
+  const renderSingleAux = (aux: typeof firstAux, auxId: number, idx: number, customName?: string) => {
     if (!aux) return null;
     const savedLevel = savedCh?.auxSends[idx]?.level;
     const dbStr = faderToDbString(aux.level).replace(' dB', '');
@@ -456,11 +465,13 @@ export const WidgetAuxPair: React.FC<WidgetAuxPairProps> = ({
             ),
           })
         }
-        title={`Aux ${auxId}: doppio click per ripristinare`}
+        title={customName ? `AUX ${auxId} (${customName}): doppio click per ripristinare` : `AUX ${auxId}: doppio click per ripristinare`}
         className="bg-slate-950/80 border border-slate-850 rounded p-0.5 flex flex-col items-center gap-0.5 cursor-pointer flex-1"
       >
         <div className="flex items-center justify-between w-full text-[9px] font-mono px-0.5">
-          <span className="text-amber-300 font-bold">A{auxId}</span>
+          <span className="text-amber-300 font-bold truncate max-w-[45px]" title={customName || `AUX ${auxId}`}>
+            {customName || `A${auxId}`}
+          </span>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -511,14 +522,19 @@ export const WidgetAuxPair: React.FC<WidgetAuxPairProps> = ({
   return (
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1 flex flex-col justify-between h-full select-none shadow-sm">
       <div className="flex items-center justify-between border-b border-slate-850/80 pb-0.5 px-1">
-        <span className="text-[10px] font-mono font-bold text-amber-400">
-          AUX {firstId} & {secondId}
+        <span
+          className="text-[10px] font-mono font-bold text-amber-400 truncate max-w-full"
+          title={`${firstName || `AUX ${firstId}`} & ${secondName || `AUX ${secondId}`}`}
+        >
+          {firstName || secondName
+            ? `${firstName || `A${firstId}`} / ${secondName || `A${secondId}`}`
+            : `AUX ${firstId} & ${secondId}`}
         </span>
       </div>
 
       <div className="flex items-center gap-1 flex-1 py-0.5">
-        {renderSingleAux(firstAux, firstId, firstIdx)}
-        {renderSingleAux(secondAux, secondId, secondIdx)}
+        {renderSingleAux(firstAux, firstId, firstIdx, firstName)}
+        {renderSingleAux(secondAux, secondId, secondIdx, secondName)}
       </div>
     </div>
   );
@@ -782,6 +798,7 @@ export const WidgetRouting: React.FC<WidgetCommonProps> = (props) => (
 export const WidgetVerticalRouting: React.FC<WidgetCommonProps> = ({
   ch,
   sendCommand,
+  busNames,
 }) => {
   return (
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1.5 flex flex-col justify-between h-full select-none shadow-sm">
@@ -833,27 +850,32 @@ export const WidgetVerticalRouting: React.FC<WidgetCommonProps> = ({
         </button>
 
         {/* Bus 1 to 8: One per row */}
-        {ch.routing.bus.map((bOn, bIdx) => (
-          <button
-            key={bIdx}
-            onClick={() =>
-              sendCommand({
-                type: 'set_routing',
-                id: ch.id,
-                target: 'bus',
-                busIndex: bIdx,
-                value: !bOn,
-              })
-            }
-            className={`w-full py-0.5 rounded text-[8px] font-mono font-bold border cursor-pointer transition ${
-              bOn
-                ? 'bg-cyan-500 text-slate-950 border-cyan-300'
-                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-            }`}
-          >
-            B{bIdx + 1}
-          </button>
-        ))}
+        {ch.routing.bus.map((bOn, bIdx) => {
+          const busId = bIdx + 1;
+          const busName = busNames?.[bIdx] || `BUS ${busId}`;
+          return (
+            <button
+              key={bIdx}
+              onClick={() =>
+                sendCommand({
+                  type: 'set_routing',
+                  id: ch.id,
+                  target: 'bus',
+                  busIndex: bIdx,
+                  value: !bOn,
+                })
+              }
+              title={`BUS ${busId}: ${busName}`}
+              className={`w-full py-0.5 rounded text-[8px] font-mono font-bold border cursor-pointer transition truncate px-0.5 ${
+                bOn
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-300'
+                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+              }`}
+            >
+              {busName !== `BUS ${busId}` && busName.length <= 5 ? busName : `B${busId}`}
+            </button>
+          );
+        })}
       </div>
 
       {/* Delay Toggle & Time */}

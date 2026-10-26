@@ -379,19 +379,23 @@ export const App: React.FC = () => {
               >
                 MAIN LEVEL
               </button>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((auxId) => (
-                <button
-                  key={auxId}
-                  onClick={() => setFaderFlipAux(faderFlipAux === auxId ? null : auxId)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
-                    faderFlipAux === auxId
-                      ? 'bg-amber-500 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
-                      : 'bg-slate-900 text-slate-400 hover:text-amber-300'
-                  }`}
-                >
-                  AUX {auxId}
-                </button>
-              ))}
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((auxId) => {
+                const auxName = state.auxes[auxId - 1]?.name || `AUX ${auxId}`;
+                return (
+                  <button
+                    key={auxId}
+                    onClick={() => setFaderFlipAux(faderFlipAux === auxId ? null : auxId)}
+                    title={`AUX ${auxId}: ${auxName}`}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition max-w-[120px] truncate ${
+                      faderFlipAux === auxId
+                        ? 'bg-amber-500 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
+                        : 'bg-slate-900 text-slate-400 hover:text-amber-300'
+                    }`}
+                  >
+                    {auxName}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -412,6 +416,8 @@ export const App: React.FC = () => {
                   controlMode={controlMode}
                   onChangeControlMode={handleControlModeChange}
                   sendCommand={sendCommand}
+                  auxNames={state.auxes.map((a) => a.name)}
+                  busNames={state.buses.map((b) => b.name)}
                 />
               </div>
             )}
@@ -509,7 +515,7 @@ export const App: React.FC = () => {
                           sendCommand({ type: 'set_pan', target: 'ch', id: ch.id, value: val })
                         }
                         onRename={(newName) =>
-                          sendCommand({ type: 'set_name', id: ch.id, name: newName })
+                          sendCommand({ type: 'set_name', target: 'ch', id: ch.id, name: newName })
                         }
                       />
                     );
@@ -542,6 +548,9 @@ export const App: React.FC = () => {
                         onChangePan={(val) =>
                           sendCommand({ type: 'set_pan', target: 'aux', id: aux.id, value: val })
                         }
+                        onRename={(newName) =>
+                          sendCommand({ type: 'set_name', target: 'aux', id: aux.id, name: newName })
+                        }
                       />
                     );
                   })}
@@ -572,6 +581,9 @@ export const App: React.FC = () => {
                         }
                         onChangePan={(val) =>
                           sendCommand({ type: 'set_pan', target: 'bus', id: bus.id, value: val })
+                        }
+                        onRename={(newName) =>
+                          sendCommand({ type: 'set_name', target: 'bus', id: bus.id, name: newName })
                         }
                       />
                     );

@@ -137,11 +137,11 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
       <div
         onDoubleClick={() => {
           if (onRename) {
-            setNameDraft(name);
+            setNameDraft(name || label);
             setEditingName(true);
           }
         }}
-        title="Doppio click per rinominare sul display del mixer"
+        title={name ? `${label}: ${name} (Doppio click per modificare)` : `${label} (Doppio click per modificare)`}
         className={`w-full ${compact ? 'h-5 mb-1' : 'h-6 mb-1.5'} ${
           isExpansionBank ? 'bg-[#090712] border-purple-900/50' : 'bg-[#070a0f] border-slate-800'
         } border rounded flex items-center justify-center px-0.5 overflow-hidden cursor-pointer`}
@@ -149,10 +149,10 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         {editingName ? (
           <input
             type="text"
-            maxLength={4}
+            maxLength={32}
             autoFocus
             value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value.toUpperCase())}
+            onChange={(e) => setNameDraft(e.target.value)}
             onBlur={() => {
               setEditingName(false);
               onRename?.(nameDraft);
@@ -161,6 +161,9 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
               if (e.key === 'Enter') {
                 setEditingName(false);
                 onRename?.(nameDraft);
+              } else if (e.key === 'Escape') {
+                setNameDraft(name);
+                setEditingName(false);
               }
             }}
             className={`w-full bg-transparent text-center text-[10px] sm:text-[11px] font-mono font-bold ${
@@ -168,10 +171,13 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
             } outline-none`}
           />
         ) : (
-          <span className={`text-[10px] sm:text-[11px] font-mono font-semibold ${
-            isExpansionBank ? 'text-purple-200' : 'text-cyan-200'
-          } truncate`}>
-            {name || `CH${id}`}
+          <span
+            title={name || label}
+            className={`text-[10px] sm:text-[11px] font-mono font-semibold ${
+              isExpansionBank ? 'text-purple-200' : 'text-cyan-200'
+            } truncate`}
+          >
+            {name || label}
           </span>
         )}
       </div>
