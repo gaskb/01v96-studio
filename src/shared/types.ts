@@ -133,7 +133,7 @@ export interface MixerSetupState {
 
 export interface MixerState {
   connected: boolean;
-  connectionMode: 'usb-direct' | 'bridge' | 'simulated';
+  connectionMode: 'usb-direct' | 'simulated';
   deviceName: string;
   sceneNumber: number;
   sceneTitle: string;

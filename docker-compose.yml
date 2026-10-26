@@ -5,8 +5,12 @@ services:
     restart: unless-stopped
     ports:
       - "8096:8096"
+    # Privileged mode ensures raw USB device access via libusb on Linux hosts
+    privileged: true
     devices:
       - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - ./data:/app/data
     environment:
       - PORT=8096
       - NODE_ENV=production
