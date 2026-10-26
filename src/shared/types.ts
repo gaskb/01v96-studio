@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.4.0';
-export const UI_VERSION = '0.4.0';
-export const API_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
+export const UI_VERSION = '0.5.0';
+export const API_VERSION = '0.5.0';
 
 export type ControlMode = 'knobs' | 'sliders';
 
