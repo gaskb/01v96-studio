@@ -14,6 +14,7 @@ interface FaderStripProps {
   meter: number;
   selected: boolean;
   accentColor?: 'cyan' | 'amber' | 'purple' | 'rose';
+  compact?: boolean;
   onSelect: () => void;
   onChangeFader: (val: number) => void;
   onToggleOn: () => void;
@@ -35,6 +36,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   meter,
   selected,
   accentColor = 'cyan',
+  compact = false,
   onSelect,
   onChangeFader,
   onToggleOn,
@@ -102,14 +104,18 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
           ? 'from-purple-400 to-purple-600 border-purple-200'
           : 'from-slate-200 to-slate-400 border-white';
 
+  const widthClass = compact
+    ? 'flex-1 min-w-[40px] sm:min-w-[46px] 2xl:min-w-[52px] p-1'
+    : 'flex-1 min-w-[58px] sm:min-w-[64px] p-1.5';
+
   return (
     <div
-      className={`flex flex-col items-center w-[62px] min-w-[62px] sm:w-[66px] sm:min-w-[66px] h-full rounded-xl border p-1.5 transition-colors select-none ${borderStyle}`}
+      className={`flex flex-col items-center h-full rounded-xl border transition-colors select-none ${widthClass} ${borderStyle}`}
     >
       {/* SEL Button */}
       <button
         onClick={onSelect}
-        className={`w-full py-1 rounded-md text-[10px] font-mono font-bold tracking-wider uppercase transition cursor-pointer mb-1 ${
+        className={`w-full py-0.5 sm:py-1 rounded-md text-[9px] sm:text-[10px] font-mono font-bold tracking-wider uppercase transition cursor-pointer mb-1 ${
           selected
             ? 'bg-cyan-400 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.6)]'
             : 'bg-slate-800/90 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
@@ -127,7 +133,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
           }
         }}
         title="Doppio click per rinominare sul display del mixer"
-        className="w-full h-6 bg-[#070a0f] border border-slate-800 rounded flex items-center justify-center mb-1.5 px-1 overflow-hidden cursor-pointer"
+        className={`w-full ${compact ? 'h-5 mb-1' : 'h-6 mb-1.5'} bg-[#070a0f] border border-slate-800 rounded flex items-center justify-center px-0.5 overflow-hidden cursor-pointer`}
       >
         {editingName ? (
           <input
@@ -146,10 +152,10 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
                 onRename?.(nameDraft);
               }
             }}
-            className="w-full bg-transparent text-center text-[11px] font-mono font-bold text-cyan-300 outline-none"
+            className="w-full bg-transparent text-center text-[10px] sm:text-[11px] font-mono font-bold text-cyan-300 outline-none"
           />
         ) : (
-          <span className="text-[11px] font-mono font-semibold text-cyan-200 truncate">
+          <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-cyan-200 truncate">
             {name || `CH${id}`}
           </span>
         )}
@@ -158,7 +164,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
       {/* ON (Unmute) Button — Yamaha Orange/Amber style */}
       <button
         onClick={onToggleOn}
-        className={`w-full py-1.5 rounded-md text-[11px] font-mono font-bold tracking-wider transition cursor-pointer mb-1 ${
+        className={`w-full ${compact ? 'py-1 text-[10px]' : 'py-1.5 text-[11px]'} rounded-md font-mono font-bold tracking-wider transition cursor-pointer mb-1 ${
           on
             ? 'bg-amber-500 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.5)]'
             : 'bg-slate-900 text-slate-500 border border-slate-800 hover:text-slate-300'
@@ -171,7 +177,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
       {onToggleSolo && (
         <button
           onClick={onToggleSolo}
-          className={`w-full py-0.5 rounded text-[9px] font-mono font-bold tracking-wider transition cursor-pointer mb-1.5 ${
+          className={`w-full py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-bold tracking-wider transition cursor-pointer mb-1 ${
             solo
               ? 'bg-yellow-400 text-slate-950 shadow-[0_0_10px_rgba(250,204,21,0.6)]'
               : 'bg-slate-900/70 text-slate-500 border border-slate-800/80 hover:text-slate-300'
@@ -183,7 +189,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
 
       {/* Mini Pan Bar (Wheel + Double-Click Reset) */}
       <div
-        className="w-full mb-1.5 px-0.5"
+        className="w-full mb-1 px-0.5"
         onDoubleClick={resetPan}
         onWheel={(e) => {
           e.preventDefault();
@@ -193,9 +199,9 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         }}
         title="Doppio click per ripristinare il Pan salvato / Centro"
       >
-        <div className="flex justify-between text-[9px] font-mono text-slate-400 mb-0.5 cursor-pointer">
+        <div className="flex justify-between text-[8px] sm:text-[9px] font-mono text-slate-400 mb-0.5 cursor-pointer">
           <span>PAN</span>
-          <span className="text-slate-300 hover:text-cyan-300">{formatPan(pan)}</span>
+          <span className="text-slate-300 hover:text-cyan-300 truncate max-w-[28px]">{formatPan(pan)}</span>
         </div>
         <input
           type="range"
@@ -209,7 +215,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
 
       {/* Fader Track + Live LED Meter */}
       <div
-        className="relative flex-1 w-full flex items-center justify-center gap-1.5 my-1 min-h-[190px]"
+        className="relative flex-1 w-full flex items-center justify-center gap-1 sm:gap-1.5 my-1 min-h-[150px] sm:min-h-[180px] xl:min-h-[220px]"
         onWheel={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -218,7 +224,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         }}
       >
         {/* dB Scale Tick Marks */}
-        <div className="relative h-full w-3 flex flex-col justify-between py-4 text-[8px] font-mono text-slate-500 select-none pointer-events-none">
+        <div className={`relative h-full ${compact ? 'w-2 text-[7px] hidden 2xl:flex' : 'w-3 text-[8px] flex'} flex-col justify-between py-4 font-mono text-slate-500 select-none pointer-events-none`}>
           <span>+10</span>
           <span className="text-cyan-400 font-bold">0</span>
           <span>-10</span>

@@ -1,10 +1,33 @@
-import React from 'react';
-import { COMP_RATIOS, faderToDbString, formatPan } from '../../shared/converters';
+import React, { useState } from 'react';
 import { ClientCommand, ControlMode, InputChannelState, MixerState } from '../../shared/types';
+import {
+  loadStoredLayout,
+  normalizeLayout,
+  resetStoredLayout,
+  saveStoredLayout,
+} from './channel-layout/defaultPresets';
+import {
+  WidgetAux12,
+  WidgetAux34,
+  WidgetAux56,
+  WidgetAux78,
+  WidgetAuxSends,
+  WidgetCompressor,
+  WidgetEqBands,
+  WidgetEqGraph,
+  WidgetEqHigh,
+  WidgetEqHiMid,
+  WidgetEqLoMid,
+  WidgetEqLow,
+  WidgetGate,
+  WidgetMeterPreamp,
+  WidgetPreampAttenPan,
+  WidgetRouting,
+} from './channel-layout/ChannelWidgets';
+import { LayoutToolbar } from './channel-layout/LayoutToolbar';
+import { ChannelLayoutConfig, WidgetId, WidgetLayoutItem } from './channel-layout/layoutTypes';
+import { ModularWidgetCard } from './channel-layout/ModularWidgetCard';
 import { FaderStrip } from './FaderStrip';
-import { InOutMeterBridge } from './InOutMeterBridge';
-import { InteractiveEQ } from './InteractiveEQ';
-import { resolveKnobReset, RotaryKnob } from './RotaryKnob';
 
 interface SingleDualChannelViewProps {
   state: MixerState;
@@ -14,20 +37,161 @@ interface SingleDualChannelViewProps {
   sendCommand: (cmd: ClientCommand) => void;
 }
 
-const handleSliderWheel = (
-  e: React.WheelEvent<HTMLInputElement>,
-  current: number,
-  min: number,
-  max: number,
-  step: number,
-  onChange: (val: number) => void
+const renderWidgetContent = (
+  id: WidgetId,
+  ch: InputChannelState,
+  savedCh: InputChannelState | undefined,
+  controlMode: ControlMode,
+  sendCommand: (cmd: ClientCommand) => void
 ) => {
-  e.preventDefault();
-  e.stopPropagation();
-  const dir = e.deltaY < 0 ? 1 : -1;
-  const next = Math.max(min, Math.min(max, current + dir * step));
-  if (next !== current) {
-    onChange(next);
+  switch (id) {
+    case 'meter_vertical':
+    case 'meter_preamp':
+      return (
+        <WidgetMeterPreamp
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'preamp':
+      return (
+        <WidgetPreampAttenPan
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'eq_graph':
+      return (
+        <WidgetEqGraph
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'eq_high':
+      return (
+        <WidgetEqHigh
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'eq_himid':
+      return (
+        <WidgetEqHiMid
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'eq_lomid':
+      return (
+        <WidgetEqLoMid
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'eq_low':
+      return (
+        <WidgetEqLow
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'eq_bands':
+      return (
+        <WidgetEqBands
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'compressor':
+      return (
+        <WidgetCompressor
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'gate':
+      return (
+        <WidgetGate
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'aux_1_2':
+      return (
+        <WidgetAux12
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'aux_3_4':
+      return (
+        <WidgetAux34
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'aux_5_6':
+      return (
+        <WidgetAux56
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'aux_7_8':
+      return (
+        <WidgetAux78
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'aux_sends':
+      return (
+        <WidgetAuxSends
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'routing':
+      return (
+        <WidgetRouting
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    default:
+      return null;
   }
 };
 
@@ -37,9 +201,33 @@ const FullChannelColumn: React.FC<{
   controlMode: ControlMode;
   isSelected: boolean;
   sendCommand: (cmd: ClientCommand) => void;
-}> = ({ ch, savedCh, controlMode, isSelected, sendCommand }) => {
-  const compRatioLabel = COMP_RATIOS[ch.comp.ratio] ?? '2:1';
-
+  layout: ChannelLayoutConfig;
+  isEditMode: boolean;
+  draggedId: string | null;
+  dragOverId: string | null;
+  onUpdateItem: (updated: WidgetLayoutItem) => void;
+  onDropOnCell: (id: string, col: number, row: number) => void;
+  onDropOnWidget: (targetId: string, e: React.DragEvent) => void;
+  onDragStart: (id: string, e: React.DragEvent) => void;
+  onDragOver: (id: string, e: React.DragEvent) => void;
+  onDragEnd: () => void;
+}> = ({
+  ch,
+  savedCh,
+  controlMode,
+  isSelected,
+  sendCommand,
+  layout,
+  isEditMode,
+  draggedId,
+  dragOverId,
+  onUpdateItem,
+  onDropOnCell,
+  onDropOnWidget,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+}) => {
   return (
     <div
       className={`flex-1 min-w-[340px] flex flex-col lg:flex-row gap-3 bg-[#0c1018] border rounded-2xl p-3.5 overflow-y-auto ${
@@ -48,7 +236,7 @@ const FullChannelColumn: React.FC<{
           : 'border-slate-800/90'
       }`}
     >
-      {/* Left Tall Motorized Fader + Preamp Column */}
+      {/* Left Column: Motorized Fader + Preamp Controls */}
       <div className="flex flex-col items-center gap-2 shrink-0">
         <FaderStrip
           id={ch.id}
@@ -76,7 +264,7 @@ const FullChannelColumn: React.FC<{
           onRename={(newName) => sendCommand({ type: 'set_name', id: ch.id, name: newName })}
         />
 
-        {/* Quick Phase & Pair Buttons under Fader */}
+        {/* Phase Invert & Pair Buttons */}
         <button
           onClick={() => sendCommand({ type: 'set_phase', id: ch.id, value: !ch.phase })}
           className={`w-full py-1 rounded text-[10px] font-mono font-bold border cursor-pointer ${
@@ -100,868 +288,70 @@ const FullChannelColumn: React.FC<{
         </button>
       </div>
 
-      {/* Right Comprehensive Rack: Meters, EQ, Gate/Comp, Aux 1-8, Routing */}
-      <div className="flex-1 flex flex-col gap-3 min-w-0">
-        {/* 1. Live IN / OUT / GR Level Bridge + Preamp Attenuator & Pan */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-2.5 items-center">
-          <div className="xl:col-span-2">
-            <InOutMeterBridge meterIn={ch.meterIn} meterOut={ch.meterOut} grDb={ch.grDb} />
-          </div>
-          <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-2 flex flex-col justify-center">
-            {controlMode === 'knobs' ? (
-              <div className="grid grid-cols-2 gap-2">
-                <RotaryKnob
-                  label="ATTEN"
-                  value={ch.att}
-                  min={-360}
-                  max={180}
-                  step={5}
-                  savedValue={savedCh?.att}
-                  defaultValue={0}
-                  displayValue={`${(ch.att / 10).toFixed(1)}dB`}
-                  color="#22d3ee"
-                  size={42}
-                  bipolar
-                  onChange={(val) => sendCommand({ type: 'set_att', id: ch.id, value: val })}
-                />
-                <RotaryKnob
-                  label="PAN"
-                  value={ch.pan}
-                  min={-63}
-                  max={63}
-                  step={1}
-                  savedValue={savedCh?.pan}
-                  defaultValue={0}
-                  displayValue={formatPan(ch.pan)}
-                  color="#22d3ee"
-                  size={42}
-                  bipolar
-                  onChange={(val) =>
-                    sendCommand({ type: 'set_pan', target: 'ch', id: ch.id, value: val })
-                  }
-                />
-              </div>
-            ) : (
-              <>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_att',
-                      id: ch.id,
-                      value: resolveKnobReset(
-                        ch.att,
-                        savedCh?.att,
-                        0,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                  className="flex justify-between text-[10px] font-mono text-slate-400 cursor-pointer select-none"
-                >
-                  <span>ATTENUATOR</span>
-                  <span className="text-cyan-300">{(ch.att / 10).toFixed(1)} dB</span>
-                </div>
-                <input
-                  type="range"
-                  min={-360}
-                  max={180}
-                  value={ch.att}
-                  onChange={(e) =>
-                    sendCommand({ type: 'set_att', id: ch.id, value: Number(e.target.value) })
-                  }
-                  onWheel={(e) =>
-                    handleSliderWheel(e, ch.att, -360, 180, 5, (val) =>
-                      sendCommand({ type: 'set_att', id: ch.id, value: val })
-                    )
-                  }
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_att',
-                      id: ch.id,
-                      value: resolveKnobReset(
-                        ch.att,
-                        savedCh?.att,
-                        0,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  className="w-full accent-cyan-400 cursor-pointer"
-                />
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_pan',
-                      target: 'ch',
-                      id: ch.id,
-                      value: resolveKnobReset(
-                        ch.pan,
-                        savedCh?.pan,
-                        0,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina Pan memorizzato nella scena"
-                  className="flex justify-between text-[10px] font-mono text-slate-400 mt-1 cursor-pointer select-none"
-                >
-                  <span>PAN</span>
-                  <span className="text-slate-200">{formatPan(ch.pan)}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* 2. Interactive 4-Band EQ */}
-        <InteractiveEQ
-          eq={ch.eq}
-          savedEq={savedCh?.eq}
-          controlMode={controlMode}
-          meterIn={ch.meterIn}
-          meterOut={ch.meterOut}
-          grDb={ch.grDb}
-          compact
-          onChange={(param, value) =>
-            sendCommand({ type: 'set_eq', target: 'ch', id: ch.id, param, value })
-          }
-        />
-
-        {/* 3. Dynamics (Gate + Compressor side-by-side) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-          {/* Gate */}
-          <div className="bg-[#0d1118] border border-slate-800 rounded-xl p-2.5 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono font-bold text-amber-400">NOISE GATE</span>
-              <button
-                onClick={() =>
-                  sendCommand({ type: 'set_gate', id: ch.id, param: 'on', value: !ch.gate.on })
-                }
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer ${
-                  ch.gate.on ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {ch.gate.on ? 'ON' : 'OFF'}
-              </button>
-            </div>
-            {controlMode === 'knobs' ? (
-              <div className="grid grid-cols-4 gap-1 py-0.5">
-                <RotaryKnob
-                  label="THRESH"
-                  value={ch.gate.threshold}
-                  min={-540}
-                  max={0}
-                  step={5}
-                  savedValue={savedCh?.gate.threshold}
-                  defaultValue={-260}
-                  displayValue={`${(ch.gate.threshold / 10).toFixed(1)}`}
-                  color="#f59e0b"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
-                  }
-                />
-                <RotaryKnob
-                  label="RANGE"
-                  value={ch.gate.range}
-                  min={-700}
-                  max={0}
-                  step={5}
-                  savedValue={savedCh?.gate.range}
-                  defaultValue={-560}
-                  displayValue={`${(ch.gate.range / 10).toFixed(1)}`}
-                  color="#f59e0b"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
-                  }
-                />
-                <RotaryKnob
-                  label="ATTACK"
-                  value={ch.gate.attack}
-                  min={0}
-                  max={120}
-                  step={1}
-                  savedValue={savedCh?.gate.attack}
-                  defaultValue={10}
-                  displayValue={`${ch.gate.attack}`}
-                  color="#f59e0b"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
-                  }
-                />
-                <RotaryKnob
-                  label="DECAY"
-                  value={ch.gate.decay}
-                  min={0}
-                  max={159}
-                  step={1}
-                  savedValue={savedCh?.gate.decay}
-                  defaultValue={44}
-                  displayValue={`${ch.gate.decay}`}
-                  color="#f59e0b"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
-                  }
-                />
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: ch.id,
-                      param: 'threshold',
-                      value: resolveKnobReset(
-                        ch.gate.threshold,
-                        savedCh?.gate.threshold,
-                        -260,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>THRESH</span>
-                    <span className="text-slate-200">{(ch.gate.threshold / 10).toFixed(1)}dB</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={-540}
-                    max={0}
-                    value={ch.gate.threshold}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_gate',
-                        id: ch.id,
-                        param: 'threshold',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.gate.threshold, -540, 0, 5, (val) =>
-                        sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: ch.id,
-                      param: 'range',
-                      value: resolveKnobReset(
-                        ch.gate.range,
-                        savedCh?.gate.range,
-                        -560,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>RANGE</span>
-                    <span className="text-slate-200">{(ch.gate.range / 10).toFixed(1)}dB</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={-700}
-                    max={0}
-                    value={ch.gate.range}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_gate',
-                        id: ch.id,
-                        param: 'range',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.gate.range, -700, 0, 5, (val) =>
-                        sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: ch.id,
-                      param: 'attack',
-                      value: resolveKnobReset(
-                        ch.gate.attack,
-                        savedCh?.gate.attack,
-                        10,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>ATTACK</span>
-                    <span className="text-slate-200">{ch.gate.attack}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={120}
-                    value={ch.gate.attack}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_gate',
-                        id: ch.id,
-                        param: 'attack',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.gate.attack, 0, 120, 1, (val) =>
-                        sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_gate',
-                      id: ch.id,
-                      param: 'decay',
-                      value: resolveKnobReset(
-                        ch.gate.decay,
-                        savedCh?.gate.decay,
-                        44,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>DECAY</span>
-                    <span className="text-slate-200">{ch.gate.decay}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={159}
-                    value={ch.gate.decay}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_gate',
-                        id: ch.id,
-                        param: 'decay',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.gate.decay, 0, 159, 1, (val) =>
-                        sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
-                      )
-                    }
-                    className="w-full accent-amber-400 cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Compressor */}
-          <div className="bg-[#0d1118] border border-slate-800 rounded-xl p-2.5 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-mono font-bold text-cyan-400">COMPRESSOR</span>
-              <button
-                onClick={() =>
-                  sendCommand({
-                    type: 'set_comp',
-                    target: 'ch',
-                    id: ch.id,
-                    param: 'on',
-                    value: !ch.comp.on,
-                  })
-                }
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold cursor-pointer ${
-                  ch.comp.on ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {ch.comp.on ? 'ON' : 'OFF'}
-              </button>
-            </div>
-            {controlMode === 'knobs' ? (
-              <div className="grid grid-cols-4 gap-1 py-0.5">
-                <RotaryKnob
-                  label="THRESH"
-                  value={ch.comp.threshold}
-                  min={-540}
-                  max={0}
-                  step={5}
-                  savedValue={savedCh?.comp.threshold}
-                  defaultValue={-200}
-                  displayValue={`${(ch.comp.threshold / 10).toFixed(1)}`}
-                  color="#22d3ee"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'threshold',
-                      value: val,
-                    })
-                  }
-                />
-                <RotaryKnob
-                  label="RATIO"
-                  value={ch.comp.ratio}
-                  min={0}
-                  max={15}
-                  step={1}
-                  savedValue={savedCh?.comp.ratio}
-                  defaultValue={5}
-                  displayValue={compRatioLabel}
-                  color="#22d3ee"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'ratio',
-                      value: val,
-                    })
-                  }
-                />
-                <RotaryKnob
-                  label="GAIN"
-                  value={ch.comp.gain}
-                  min={0}
-                  max={180}
-                  step={5}
-                  savedValue={savedCh?.comp.gain}
-                  defaultValue={0}
-                  displayValue={`+${(ch.comp.gain / 10).toFixed(1)}`}
-                  color="#10b981"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'gain',
-                      value: val,
-                    })
-                  }
-                />
-                <RotaryKnob
-                  label="RELEASE"
-                  value={ch.comp.release}
-                  min={0}
-                  max={159}
-                  step={1}
-                  savedValue={savedCh?.comp.release}
-                  defaultValue={40}
-                  displayValue={`${ch.comp.release}`}
-                  color="#22d3ee"
-                  size={40}
-                  onChange={(val) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'release',
-                      value: val,
-                    })
-                  }
-                />
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'threshold',
-                      value: resolveKnobReset(
-                        ch.comp.threshold,
-                        savedCh?.comp.threshold,
-                        -200,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>THRESH</span>
-                    <span className="text-slate-200">{(ch.comp.threshold / 10).toFixed(1)}dB</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={-540}
-                    max={0}
-                    value={ch.comp.threshold}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_comp',
-                        target: 'ch',
-                        id: ch.id,
-                        param: 'threshold',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.comp.threshold, -540, 0, 5, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: ch.id,
-                          param: 'threshold',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
-                  />
-                </div>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'ratio',
-                      value: resolveKnobReset(
-                        ch.comp.ratio,
-                        savedCh?.comp.ratio,
-                        5,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>RATIO</span>
-                    <span className="text-cyan-300 font-bold">{compRatioLabel}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={15}
-                    value={ch.comp.ratio}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_comp',
-                        target: 'ch',
-                        id: ch.id,
-                        param: 'ratio',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.comp.ratio, 0, 15, 1, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: ch.id,
-                          param: 'ratio',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
-                  />
-                </div>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'gain',
-                      value: resolveKnobReset(
-                        ch.comp.gain,
-                        savedCh?.comp.gain,
-                        0,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>GAIN</span>
-                    <span className="text-emerald-300">+{(ch.comp.gain / 10).toFixed(1)}dB</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={180}
-                    value={ch.comp.gain}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_comp',
-                        target: 'ch',
-                        id: ch.id,
-                        param: 'gain',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.comp.gain, 0, 180, 5, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: ch.id,
-                          param: 'gain',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-emerald-400 cursor-pointer"
-                  />
-                </div>
-                <div
-                  onDoubleClick={(e) =>
-                    sendCommand({
-                      type: 'set_comp',
-                      target: 'ch',
-                      id: ch.id,
-                      param: 'release',
-                      value: resolveKnobReset(
-                        ch.comp.release,
-                        savedCh?.comp.release,
-                        40,
-                        e.shiftKey || e.altKey
-                      ),
-                    })
-                  }
-                  title="Doppio click: ripristina valore memorizzato nella scena"
-                >
-                  <div className="flex justify-between text-slate-400 cursor-pointer select-none">
-                    <span>RELEASE</span>
-                    <span className="text-slate-200">{ch.comp.release}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={159}
-                    value={ch.comp.release}
-                    onChange={(e) =>
-                      sendCommand({
-                        type: 'set_comp',
-                        target: 'ch',
-                        id: ch.id,
-                        param: 'release',
-                        value: Number(e.target.value),
-                      })
-                    }
-                    onWheel={(e) =>
-                      handleSliderWheel(e, ch.comp.release, 0, 159, 1, (val) =>
-                        sendCommand({
-                          type: 'set_comp',
-                          target: 'ch',
-                          id: ch.id,
-                          param: 'release',
-                          value: val,
-                        })
-                      )
-                    }
-                    className="w-full accent-cyan-400 cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 4. AUX Sends 1..8 & Bus Routing */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-          {/* AUX 1..8 */}
-          <div className="bg-[#0d1118] border border-slate-800 rounded-xl p-2.5">
-            <div className="text-[10px] font-mono font-bold text-amber-300 mb-2">
-              AUX SENDS 1-8 (CH {ch.id})
-            </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {ch.auxSends.map((aux, idx) => {
-                const savedLevel = savedCh?.auxSends[idx]?.level;
+      {/* Right Column: Dynamic Modular 4x24 Grid */}
+      <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
+            gridTemplateRows: 'repeat(4, minmax(52px, 1fr))',
+            position: 'relative',
+          }}
+          className="gap-2.5 min-h-[220px]"
+        >
+          {/* 4x24 Background Drop Grid Cells (Visible in Edit Mode) */}
+          {isEditMode &&
+            Array.from({ length: 4 }).map((_, rIdx) =>
+              Array.from({ length: 24 }).map((_, cIdx) => {
+                const row = rIdx + 1;
+                const col = cIdx + 1;
                 return (
                   <div
-                    key={idx}
-                    onDoubleClick={(e) =>
-                      sendCommand({
-                        type: 'set_aux_send',
-                        chId: ch.id,
-                        auxId: idx + 1,
-                        param: 'level',
-                        value: resolveKnobReset(
-                          aux.level,
-                          savedLevel,
-                          823,
-                          e.shiftKey || e.altKey
-                        ),
-                      })
-                    }
-                    title="Doppio click: ripristina valore memorizzato nella scena"
-                    className="bg-slate-900/80 border border-slate-800 rounded p-1.5 flex flex-col items-center gap-1 cursor-pointer select-none"
+                    key={`grid-cell-${row}-${col}`}
+                    style={{
+                      gridColumn: `${col} / span 1`,
+                      gridRow: `${row} / span 1`,
+                      zIndex: 0,
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const id = e.dataTransfer.getData('text/plain') || draggedId;
+                      if (id) {
+                        onDropOnCell(id, col, row);
+                      }
+                    }}
+                    className="border border-dashed border-slate-800/60 hover:border-amber-400 hover:bg-amber-400/10 rounded transition-colors flex items-center justify-center text-[7px] font-mono text-slate-700 hover:text-amber-300 select-none cursor-pointer"
+                    title={`Cella col ${col}, riga ${row}: rilascia qui per ancorare`}
                   >
-                    <div className="flex items-center justify-between w-full text-[9px] font-mono">
-                      <span className="text-amber-300 font-bold">A{idx + 1}</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          sendCommand({
-                            type: 'set_aux_send',
-                            chId: ch.id,
-                            auxId: idx + 1,
-                            param: 'pre',
-                            value: !aux.pre,
-                          });
-                        }}
-                        className="text-cyan-300 cursor-pointer"
-                      >
-                        {aux.pre ? 'PRE' : 'PST'}
-                      </button>
-                    </div>
-                    {controlMode === 'knobs' ? (
-                      <RotaryKnob
-                        label=""
-                        value={aux.level}
-                        min={0}
-                        max={1023}
-                        step={12}
-                        savedValue={savedLevel}
-                        defaultValue={823}
-                        displayValue={faderToDbString(aux.level)}
-                        color="#f59e0b"
-                        size={36}
-                        onChange={(val) =>
-                          sendCommand({
-                            type: 'set_aux_send',
-                            chId: ch.id,
-                            auxId: idx + 1,
-                            param: 'level',
-                            value: val,
-                          })
-                        }
-                      />
-                    ) : (
-                      <>
-                        <input
-                          type="range"
-                          min={0}
-                          max={1023}
-                          value={aux.level}
-                          onChange={(e) =>
-                            sendCommand({
-                              type: 'set_aux_send',
-                              chId: ch.id,
-                              auxId: idx + 1,
-                              param: 'level',
-                              value: Number(e.target.value),
-                            })
-                          }
-                          onWheel={(e) =>
-                            handleSliderWheel(e, aux.level, 0, 1023, 12, (val) =>
-                              sendCommand({
-                                type: 'set_aux_send',
-                                chId: ch.id,
-                                auxId: idx + 1,
-                                param: 'level',
-                                value: val,
-                              })
-                            )
-                          }
-                          className="w-full accent-amber-400 cursor-pointer"
-                        />
-                        <span className="text-[8px] font-mono text-slate-400">
-                          {faderToDbString(aux.level)}
-                        </span>
-                      </>
-                    )}
+                    {col},{row}
                   </div>
                 );
-              })}
-            </div>
-          </div>
+              })
+            )}
 
-          {/* Bus & Stereo Routing */}
-          <div className="bg-[#0d1118] border border-slate-800 rounded-xl p-2.5 flex flex-col justify-between">
-            <div className="text-[10px] font-mono font-bold text-purple-300 mb-2">
-              BUS & STEREO ROUTING (CH {ch.id})
-            </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              <button
-                onClick={() =>
-                  sendCommand({
-                    type: 'set_routing',
-                    id: ch.id,
-                    target: 'stereo',
-                    value: !ch.routing.stereo,
-                  })
-                }
-                className={`py-1.5 rounded text-[10px] font-mono font-bold border cursor-pointer ${
-                  ch.routing.stereo
-                    ? 'bg-rose-500 text-slate-950 border-rose-300'
-                    : 'bg-slate-900 text-slate-400 border-slate-800'
-                }`}
+          {layout.items.map((item) => {
+            if (!item.visible && !isEditMode) return null;
+            return (
+              <ModularWidgetCard
+                key={item.id}
+                item={item}
+                isEditMode={isEditMode}
+                isDragging={draggedId === item.id}
+                isDragOver={dragOverId === item.id}
+                onUpdateItem={onUpdateItem}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDrop={(targetId, e) => onDropOnWidget(targetId, e)}
+                onDragEnd={onDragEnd}
               >
-                ST L/R
-              </button>
-              <button
-                onClick={() =>
-                  sendCommand({
-                    type: 'set_routing',
-                    id: ch.id,
-                    target: 'direct',
-                    value: !ch.routing.direct,
-                  })
-                }
-                className={`py-1.5 rounded text-[10px] font-mono font-bold border cursor-pointer ${
-                  ch.routing.direct
-                    ? 'bg-cyan-500 text-slate-950 border-cyan-300'
-                    : 'bg-slate-900 text-slate-400 border-slate-800'
-                }`}
-              >
-                DIR
-              </button>
-              {ch.routing.bus.map((bOn, bIdx) => (
-                <button
-                  key={bIdx}
-                  onClick={() =>
-                    sendCommand({
-                      type: 'set_routing',
-                      id: ch.id,
-                      target: 'bus',
-                      busIndex: bIdx,
-                      value: !bOn,
-                    })
-                  }
-                  className={`py-1.5 rounded text-[10px] font-mono font-bold border cursor-pointer ${
-                    bOn
-                      ? 'bg-purple-500 text-slate-950 border-purple-300'
-                      : 'bg-slate-900 text-slate-400 border-slate-800'
-                  }`}
-                >
-                  B{bIdx + 1}
-                </button>
-              ))}
-            </div>
-          </div>
+                {renderWidgetContent(item.id, ch, savedCh, controlMode, sendCommand)}
+              </ModularWidgetCard>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -975,6 +365,11 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
   onChangeControlMode,
   sendCommand,
 }) => {
+  const [layout, setLayout] = useState<ChannelLayoutConfig>(loadStoredLayout);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   const selId = state.selectedChannel;
   const baseOddId = selId % 2 === 1 ? selId : selId - 1;
   const primaryCh = state.channels[selId - 1] ?? state.channels[0];
@@ -989,9 +384,131 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
   const savedRightCh =
     state.savedChannels?.[baseOddId] ?? savedState?.channels[baseOddId] ?? state.savedChannels?.[1];
 
+  const handleToggleEditMode = () => setIsEditMode((prev) => !prev);
+
+  const handleSelectPreset = (preset: ChannelLayoutConfig) => {
+    const normalized = normalizeLayout(preset);
+    setLayout(normalized);
+    saveStoredLayout(normalized);
+  };
+
+  const handleResetDefault = () => {
+    const reset = resetStoredLayout();
+    setLayout(reset);
+  };
+
+  const handleApplyCustomJson = (jsonStr: string): boolean => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      const normalized = normalizeLayout(parsed);
+      setLayout(normalized);
+      saveStoredLayout(normalized);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleUpdateItem = (updated: WidgetLayoutItem) => {
+    const nextItems = layout.items.map((it) => (it.id === updated.id ? updated : it));
+    const nextLayout: ChannelLayoutConfig = {
+      ...layout,
+      presetName: 'Personalizzato (4x24)',
+      items: nextItems,
+    };
+    setLayout(nextLayout);
+    saveStoredLayout(nextLayout);
+  };
+
+  const handleDropOnCell = (id: string, col: number, row: number) => {
+    const item = layout.items.find((i) => i.id === id);
+    if (!item) return;
+    const colSpan = item.colSpan || 1;
+    const rowSpan = item.rowSpan || 1;
+    const newColStart = Math.max(1, Math.min(25 - colSpan, col));
+    const newRowStart = Math.max(1, Math.min(5 - rowSpan, row));
+
+    const nextItems = layout.items.map((it) =>
+      it.id === id ? { ...it, colStart: newColStart, rowStart: newRowStart } : it
+    );
+    const nextLayout: ChannelLayoutConfig = {
+      ...layout,
+      presetName: 'Personalizzato (4x24)',
+      items: nextItems,
+    };
+    setLayout(nextLayout);
+    saveStoredLayout(nextLayout);
+  };
+
+  const handleDragStart = (id: string, e: React.DragEvent) => {
+    e.dataTransfer.setData('text/plain', id);
+    setDraggedId(id);
+  };
+
+  const handleDragOver = (id: string, e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragOverId !== id) {
+      setDragOverId(id);
+    }
+  };
+
+  const handleDropOnWidget = (targetId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain') || draggedId;
+    if (!sourceId || sourceId === targetId) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+    const source = layout.items.find((i) => i.id === sourceId);
+    const target = layout.items.find((i) => i.id === targetId);
+    if (!source || !target) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+    const sCol = source.colStart || 1;
+    const sRow = source.rowStart || 1;
+    const tCol = target.colStart || 1;
+    const tRow = target.rowStart || 1;
+
+    const nextItems = layout.items.map((it) => {
+      if (it.id === source.id) {
+        return {
+          ...it,
+          colStart: Math.min(25 - it.colSpan, tCol),
+          rowStart: Math.min(5 - (it.rowSpan || 1), tRow),
+        };
+      }
+      if (it.id === target.id) {
+        return {
+          ...it,
+          colStart: Math.min(25 - it.colSpan, sCol),
+          rowStart: Math.min(5 - (it.rowSpan || 1), sRow),
+        };
+      }
+      return it;
+    });
+
+    const nextLayout: ChannelLayoutConfig = {
+      ...layout,
+      presetName: 'Personalizzato (4x24)',
+      items: nextItems,
+    };
+    setLayout(nextLayout);
+    saveStoredLayout(nextLayout);
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden">
-      {/* Channel Selector Strip + Single vs Dual Pair Mode Switcher */}
+      {/* Channel Selector Strip + Prototyping Toggle + Mode Switcher */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0b0f17] border border-slate-800/90 rounded-xl px-3 py-2 shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto py-0.5">
           {state.channels.slice(0, 16).map((c) => (
@@ -1023,8 +540,23 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
           ))}
         </div>
 
-        {/* Toggle Knobs/Sliders + Single/Dual View */}
+        {/* Action Controls & Layout Customizer Button */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Prototyping Edit Mode Toggle */}
+          <button
+            onClick={handleToggleEditMode}
+            className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              isEditMode
+                ? 'bg-amber-500 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                : 'bg-slate-950 border border-slate-800 text-amber-400 hover:text-amber-300 hover:border-amber-500/50'
+            }`}
+            title="Attiva/Disattiva la modalità di modifica layout e posizionamento pannelli"
+          >
+            <span>📐</span>
+            <span>{isEditMode ? 'MODIFICA: ON' : 'MODIFICA LAYOUT'}</span>
+          </button>
+
+          {/* Knobs / Sliders Toggle */}
           <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono">
             <button
               onClick={() => onChangeControlMode('knobs')}
@@ -1048,6 +580,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             </button>
           </div>
 
+          {/* Single vs Dual View */}
           <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
             <button
               onClick={() => sendCommand({ type: 'set_dual_view', enabled: false })}
@@ -1057,7 +590,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              👤 SINGOLO CANALE (CH {selId})
+              👤 SINGOLO ({selId})
             </button>
             <button
               onClick={() => sendCommand({ type: 'set_dual_view', enabled: true })}
@@ -1067,14 +600,24 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              👥 COPPIA CANALI (CH {baseOddId} & CH {baseOddId + 1})
+              👥 COPPIA ({baseOddId} & {baseOddId + 1})
             </button>
           </div>
         </div>
       </div>
 
+      {/* Layout Prototyping Top Bar */}
+      <LayoutToolbar
+        layout={layout}
+        isEditMode={isEditMode}
+        onToggleEditMode={handleToggleEditMode}
+        onSelectPreset={handleSelectPreset}
+        onResetDefault={handleResetDefault}
+        onApplyCustomJson={handleApplyCustomJson}
+      />
+
       {/* Main Single or Side-by-Side Dual Channel Deck */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 overflow-y-auto">
+      <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto">
         {!state.dualChannelView ? (
           <FullChannelColumn
             ch={primaryCh}
@@ -1082,15 +625,35 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             controlMode={controlMode}
             isSelected={true}
             sendCommand={sendCommand}
+            layout={layout}
+            isEditMode={isEditMode}
+            draggedId={draggedId}
+            dragOverId={dragOverId}
+            onUpdateItem={handleUpdateItem}
+            onDropOnCell={handleDropOnCell}
+            onDropOnWidget={handleDropOnWidget}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
           />
         ) : (
-          <>
+          <div className="flex-1 flex flex-col xl:flex-row gap-3 overflow-y-auto">
             <FullChannelColumn
               ch={leftCh}
               savedCh={savedLeftCh}
               controlMode={controlMode}
               isSelected={state.selectedChannel === leftCh.id}
               sendCommand={sendCommand}
+              layout={layout}
+              isEditMode={isEditMode}
+              draggedId={draggedId}
+              dragOverId={dragOverId}
+              onUpdateItem={handleUpdateItem}
+              onDropOnCell={handleDropOnCell}
+              onDropOnWidget={handleDropOnWidget}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
             />
             <FullChannelColumn
               ch={rightCh}
@@ -1098,8 +661,18 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               controlMode={controlMode}
               isSelected={state.selectedChannel === rightCh.id}
               sendCommand={sendCommand}
+              layout={layout}
+              isEditMode={isEditMode}
+              draggedId={draggedId}
+              dragOverId={dragOverId}
+              onUpdateItem={handleUpdateItem}
+              onDropOnCell={handleDropOnCell}
+              onDropOnWidget={handleDropOnWidget}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
             />
-          </>
+          </div>
         )}
       </div>
     </div>

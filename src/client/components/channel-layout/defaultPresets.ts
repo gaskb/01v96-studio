@@ -1,0 +1,229 @@
+import { ChannelLayoutConfig, WIDGET_META_MAP, WidgetId, WidgetLayoutItem } from './layoutTypes';
+
+export const STORAGE_KEY_LAYOUT = '01v96_channel_layout_v4';
+
+export const ALL_CORE_WIDGET_IDS: WidgetId[] = [
+  'meter_vertical',
+  'eq_graph',
+  'compressor',
+  'eq_high',
+  'eq_himid',
+  'eq_lomid',
+  'eq_low',
+  'preamp',
+  'gate',
+  'aux_1_2',
+  'aux_3_4',
+  'aux_5_6',
+  'aux_7_8',
+  'routing',
+];
+
+export const PRESET_USER_MOCKUP: ChannelLayoutConfig = {
+  presetName: 'Studio Console Integrata (Spazio 4x24)',
+  items: [
+    { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 1, rowSpan: 4, visible: true },
+    { id: 'eq_graph', colStart: 2, rowStart: 1, colSpan: 8, rowSpan: 2, visible: true },
+    { id: 'compressor', colStart: 2, rowStart: 3, colSpan: 8, rowSpan: 2, visible: true },
+    { id: 'eq_high', colStart: 10, rowStart: 1, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'eq_himid', colStart: 10, rowStart: 2, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'eq_lomid', colStart: 10, rowStart: 3, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'eq_low', colStart: 10, rowStart: 4, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'preamp', colStart: 13, rowStart: 1, colSpan: 3, rowSpan: 2, visible: true },
+    { id: 'gate', colStart: 13, rowStart: 3, colSpan: 3, rowSpan: 2, visible: true },
+    { id: 'aux_1_2', colStart: 16, rowStart: 1, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'aux_3_4', colStart: 16, rowStart: 2, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'aux_5_6', colStart: 16, rowStart: 3, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'aux_7_8', colStart: 16, rowStart: 4, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'routing', colStart: 21, rowStart: 1, colSpan: 4, rowSpan: 4, visible: true },
+  ],
+};
+
+export const PRESET_CLASSIC_4COL: ChannelLayoutConfig = {
+  presetName: 'Bande Separate & Dinamiche (4x24)',
+  items: [
+    { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 1, rowSpan: 4, visible: true },
+    { id: 'eq_graph', colStart: 2, rowStart: 1, colSpan: 7, rowSpan: 2, visible: true },
+    { id: 'compressor', colStart: 2, rowStart: 3, colSpan: 7, rowSpan: 2, visible: true },
+    { id: 'eq_high', colStart: 9, rowStart: 1, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'eq_himid', colStart: 9, rowStart: 2, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'eq_lomid', colStart: 9, rowStart: 3, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'eq_low', colStart: 9, rowStart: 4, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'preamp', colStart: 13, rowStart: 1, colSpan: 3, rowSpan: 2, visible: true },
+    { id: 'gate', colStart: 13, rowStart: 3, colSpan: 3, rowSpan: 2, visible: true },
+    { id: 'aux_1_2', colStart: 16, rowStart: 1, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'aux_3_4', colStart: 16, rowStart: 2, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'aux_5_6', colStart: 16, rowStart: 3, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'aux_7_8', colStart: 16, rowStart: 4, colSpan: 5, rowSpan: 1, visible: true },
+    { id: 'routing', colStart: 21, rowStart: 1, colSpan: 4, rowSpan: 4, visible: true },
+  ],
+};
+
+export const PRESET_EQ_FOCUS: ChannelLayoutConfig = {
+  presetName: 'Focus EQ Spettro Wide (4x24)',
+  items: [
+    { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 1, rowSpan: 4, visible: true },
+    { id: 'eq_graph', colStart: 2, rowStart: 1, colSpan: 10, rowSpan: 2, visible: true },
+    { id: 'compressor', colStart: 2, rowStart: 3, colSpan: 10, rowSpan: 2, visible: true },
+    { id: 'eq_high', colStart: 12, rowStart: 1, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'eq_himid', colStart: 12, rowStart: 2, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'eq_lomid', colStart: 12, rowStart: 3, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'eq_low', colStart: 12, rowStart: 4, colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'preamp', colStart: 15, rowStart: 1, colSpan: 3, rowSpan: 2, visible: true },
+    { id: 'gate', colStart: 15, rowStart: 3, colSpan: 3, rowSpan: 2, visible: true },
+    { id: 'aux_1_2', colStart: 18, rowStart: 1, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'aux_3_4', colStart: 18, rowStart: 2, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'aux_5_6', colStart: 18, rowStart: 3, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'aux_7_8', colStart: 18, rowStart: 4, colSpan: 4, rowSpan: 1, visible: true },
+    { id: 'routing', colStart: 22, rowStart: 1, colSpan: 3, rowSpan: 4, visible: true },
+  ],
+};
+
+export const BUILTIN_PRESETS: ChannelLayoutConfig[] = [
+  PRESET_USER_MOCKUP,
+  PRESET_CLASSIC_4COL,
+  PRESET_EQ_FOCUS,
+];
+
+/**
+ * Normalizes any layout configuration or imported JSON,
+ * ensuring all 14 core widgets are present, spans are clamped,
+ * and exact coordinates (colStart 1..24, rowStart 1..4) are maintained
+ * without forced left-or-top packing.
+ */
+export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
+  if (!input || typeof input !== 'object') {
+    return structuredClone(PRESET_USER_MOCKUP);
+  }
+
+  const raw = input as Partial<ChannelLayoutConfig>;
+  const rawItems = Array.isArray(raw.items) ? raw.items : [];
+
+  const existingIds = new Set<string>();
+  const normalizedItems: WidgetLayoutItem[] = [];
+
+  for (const item of rawItems) {
+    if (item && typeof item === 'object' && typeof item.id === 'string') {
+      let id = item.id as WidgetId;
+      // Backward compatibility aliases
+      if (id === 'meter_preamp') id = 'meter_vertical';
+
+      // If user had old aggregate eq_bands or aux_sends, expand them
+      if (id === 'eq_bands') {
+        const bands: WidgetId[] = ['eq_high', 'eq_himid', 'eq_lomid', 'eq_low'];
+        let r = 1;
+        for (const b of bands) {
+          if (!existingIds.has(b)) {
+            existingIds.add(b);
+            normalizedItems.push({ id: b, colStart: 10, rowStart: r++, colSpan: 3, rowSpan: 1, visible: item.visible !== false });
+          }
+        }
+        continue;
+      }
+
+      if (id === 'aux_sends') {
+        const auxes: WidgetId[] = ['aux_1_2', 'aux_3_4', 'aux_5_6', 'aux_7_8'];
+        let r = 1;
+        for (const a of auxes) {
+          if (!existingIds.has(a)) {
+            existingIds.add(a);
+            normalizedItems.push({ id: a, colStart: 16, rowStart: r++, colSpan: 5, rowSpan: 1, visible: item.visible !== false });
+          }
+        }
+        continue;
+      }
+
+      if (id in WIDGET_META_MAP && !existingIds.has(id)) {
+        existingIds.add(id);
+        const parsedCol = Number(item.colSpan);
+        const colSpan = Math.max(1, Math.min(24, Number.isFinite(parsedCol) ? parsedCol : 2));
+        const defaultHeight = WIDGET_META_MAP[id]?.defaultHeight || 1;
+        const parsedRow = Number(item.rowSpan);
+        const rowSpan = Math.max(1, Math.min(4, Number.isFinite(parsedRow) && parsedRow > 0 ? parsedRow : defaultHeight));
+
+        const defaultItem = PRESET_USER_MOCKUP.items.find((i) => i.id === id);
+        const rawColStart = Number(item.colStart);
+        const rawRowStart = Number(item.rowStart);
+
+        const colStart = Math.max(
+          1,
+          Math.min(
+            25 - colSpan,
+            Number.isFinite(rawColStart) && rawColStart >= 1 ? rawColStart : (defaultItem?.colStart || 1)
+          )
+        );
+
+        const rowStart = Math.max(
+          1,
+          Math.min(
+            5 - rowSpan,
+            Number.isFinite(rawRowStart) && rawRowStart >= 1 ? rawRowStart : (defaultItem?.rowStart || 1)
+          )
+        );
+
+        const visible = item.visible !== false;
+        normalizedItems.push({
+          id,
+          colStart,
+          rowStart,
+          colSpan,
+          rowSpan,
+          visible,
+          minHeight: typeof item.minHeight === 'number' ? item.minHeight : undefined,
+        });
+      }
+    }
+  }
+
+  // Ensure any missing core widgets are appended with sensible defaults
+  for (const wid of ALL_CORE_WIDGET_IDS) {
+    if (!existingIds.has(wid)) {
+      const defaultItem = PRESET_USER_MOCKUP.items.find((i) => i.id === wid);
+      const meta = WIDGET_META_MAP[wid];
+      normalizedItems.push(
+        defaultItem
+          ? { ...defaultItem }
+          : { id: wid, colStart: 1, rowStart: 1, colSpan: 2, rowSpan: meta?.defaultHeight || 1, visible: true }
+      );
+    }
+  }
+
+  return {
+    presetName: typeof raw.presetName === 'string' ? raw.presetName : 'Personalizzato (4x24)',
+    items: normalizedItems,
+  };
+}
+
+export function loadStoredLayout(): ChannelLayoutConfig {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return structuredClone(PRESET_USER_MOCKUP);
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_LAYOUT);
+    if (!raw) return structuredClone(PRESET_USER_MOCKUP);
+    const parsed = JSON.parse(raw);
+    return normalizeLayout(parsed);
+  } catch {
+    return structuredClone(PRESET_USER_MOCKUP);
+  }
+}
+
+export function saveStoredLayout(layout: ChannelLayoutConfig): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function resetStoredLayout(): ChannelLayoutConfig {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY_LAYOUT);
+    } catch {
+      // Ignore
+    }
+  }
+  return structuredClone(PRESET_USER_MOCKUP);
+}

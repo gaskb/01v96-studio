@@ -154,9 +154,11 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
       title="Trascina su/giù o usa la rotella · Doppio click: ripristina valore scena / default"
       className="flex flex-col items-center justify-between gap-0.5 select-none group"
     >
-      <span className="text-[9px] font-mono font-semibold text-slate-400 group-hover:text-slate-200 tracking-tight uppercase truncate max-w-full">
-        {label}
-      </span>
+      {label ? (
+        <span className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-300 group-hover:text-white tracking-tight uppercase truncate max-w-full leading-tight">
+          {label}
+        </span>
+      ) : null}
 
       <div
         onPointerDown={(e) => {
@@ -236,10 +238,10 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
         {subControls}
         <span
           onDoubleClick={handleDoubleClick}
-          className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border transition cursor-pointer ${
+          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition cursor-pointer leading-tight ${
             hasSavedDiff
               ? 'bg-slate-950 text-amber-300 border-amber-500/40'
-              : 'bg-slate-950/90 text-slate-200 border-slate-800/90 group-hover:border-slate-700'
+              : 'bg-slate-950/90 text-slate-100 border-slate-800/90 group-hover:border-slate-700'
           }`}
         >
           {displayValue}

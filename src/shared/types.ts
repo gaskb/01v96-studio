@@ -5,6 +5,7 @@ export const API_VERSION = '0.4.0';
 export type ControlMode = 'knobs' | 'sliders';
 
 export type MixerLayer =
+  | 'all32'
   | 'ch1-16'
   | 'ch17-32'
   | 'stin-aux'

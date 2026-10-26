@@ -8,8 +8,8 @@ import {
   UI_VERSION,
   WorkspaceView,
 } from '../shared/types';
-import { ChannelStripPanel } from './components/ChannelStripPanel';
 import { FaderStrip } from './components/FaderStrip';
+import { SelectedChannelRack } from './components/SelectedChannelRack';
 import { SingleDualChannelView } from './components/SingleDualChannelView';
 import { SystemMenusPanel } from './components/SystemMenusPanel';
 
@@ -27,7 +27,7 @@ export const App: React.FC = () => {
     window.localStorage.setItem('01v96_control_mode', mode);
   }, []);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('console');
-  const [layer, setLayer] = useState<MixerLayer>('ch1-16');
+  const [layer, setLayer] = useState<MixerLayer>('all32');
   const [faderFlipAux, setFaderFlipAux] = useState<number | null>(null);
   const [showChannelStrip, setShowChannelStrip] = useState(true);
   const [sceneModalOpen, setSceneModalOpen] = useState(false);
@@ -169,11 +169,13 @@ export const App: React.FC = () => {
     savedState?.channels[0];
 
   const visibleInputChannels =
-    layer === 'ch1-16'
-      ? state.channels.slice(0, 16)
-      : layer === 'ch17-32'
-        ? state.channels.slice(16, 32)
-        : [];
+    layer === 'all32'
+      ? state.channels
+      : layer === 'ch1-16'
+        ? state.channels.slice(0, 16)
+        : layer === 'ch17-32'
+          ? state.channels.slice(16, 32)
+          : [];
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#080b10] text-slate-100 overflow-hidden">
@@ -294,6 +296,7 @@ export const App: React.FC = () => {
             <span className="text-[10px] text-slate-500">LAYER:</span>
             <div className="flex bg-[#070a0f] p-0.5 rounded-lg border border-slate-800">
               {[
+                { id: 'all32', label: '🎚️ 32 CANALI' },
                 { id: 'ch1-16', label: 'CH 1-16' },
                 { id: 'ch17-32', label: 'CH 17-32' },
                 { id: 'stin-aux', label: 'AUX 1-8' },
@@ -324,11 +327,11 @@ export const App: React.FC = () => {
                   : 'bg-slate-900 border-slate-800 text-slate-400'
               }`}
             >
-              {showChannelStrip ? '▼ HIDE STRIP' : '▲ SHOW STRIP'}
+              {showChannelStrip ? '▼ NASCONDI RACK' : '▲ MOSTRA RACK'}
             </button>
           </div>
 
-          {(layer === 'ch1-16' || layer === 'ch17-32') && (
+          {(layer === 'all32' || layer === 'ch1-16' || layer === 'ch17-32') && (
             <div className="flex items-center gap-1 overflow-x-auto">
               <span className="text-slate-500 text-[10px] mr-1">FADER FLIP:</span>
               <button
@@ -364,8 +367,8 @@ export const App: React.FC = () => {
         {workspaceView === 'console' && (
           <>
             {showChannelStrip && (
-              <div className="h-[48%] min-h-[300px] shrink-0">
-                <ChannelStripPanel
+              <div className="shrink-0">
+                <SelectedChannelRack
                   channel={selectedChannelObj}
                   savedChannel={savedSelectedChannelObj}
                   controlMode={controlMode}
@@ -375,9 +378,9 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            <div className="flex-1 min-h-0 flex gap-2 overflow-hidden">
-              <div className="flex-1 flex items-stretch gap-1.5 overflow-x-auto pb-1">
-                {(layer === 'ch1-16' || layer === 'ch17-32') &&
+            <div className="flex-1 w-full min-h-0 flex gap-1.5 overflow-hidden">
+              <div className="flex-1 w-full flex items-stretch gap-1 overflow-x-auto pb-1">
+                {(layer === 'all32' || layer === 'ch1-16' || layer === 'ch17-32') &&
                   visibleInputChannels.map((ch) => {
                     const isAuxFlip = faderFlipAux !== null;
                     const auxSendObj = isAuxFlip ? ch.auxSends[faderFlipAux - 1] : null;
@@ -393,6 +396,7 @@ export const App: React.FC = () => {
                         id={ch.id}
                         label={`CH ${ch.id}`}
                         name={ch.name}
+                        compact={layer === 'all32'}
                         on={isAuxFlip ? (auxSendObj?.on ?? true) : ch.on}
                         solo={ch.solo}
                         fader={isAuxFlip ? (auxSendObj?.level ?? 0) : ch.fader}

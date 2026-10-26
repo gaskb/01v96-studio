@@ -5,6 +5,7 @@ interface InOutMeterBridgeProps {
   meterOut: number; // 0..255
   grDb?: number;    // 0..24 dB Gain Reduction
   compact?: boolean;
+  vertical?: boolean;
 }
 
 export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
@@ -12,6 +13,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
   meterOut,
   grDb = 0,
   compact = false,
+  vertical = false,
 }) => {
   const inPct = Math.max(0, Math.min(100, (meterIn / 255) * 100));
   const outPct = Math.max(0, Math.min(100, (meterOut / 255) * 100));
@@ -19,6 +21,65 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
 
   const inDbLabel = meterIn <= 0 ? '-∞' : `${(-60 + (meterIn / 255) * 60).toFixed(0)}dB`;
   const outDbLabel = meterOut <= 0 ? '-∞' : `${(-60 + (meterOut / 255) * 60).toFixed(0)}dB`;
+
+  if (vertical) {
+    return (
+      <div className="flex flex-col items-center justify-between h-full bg-[#070a0f] border border-slate-800/90 rounded-xl p-2 w-full select-none shadow-sm">
+        <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+          METERS
+        </span>
+
+        {/* 3 Vertical Meter Columns: IN, GR, OUT */}
+        <div className="flex-1 w-full flex items-center justify-around gap-1 py-1 min-h-[140px]">
+          {/* IN METER */}
+          <div className="flex flex-col items-center h-full w-4 justify-between">
+            <span className="text-[8px] font-mono text-sky-400 font-bold">IN</span>
+            <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-end p-[1px] my-1">
+              <div
+                className="w-full rounded-full bg-gradient-to-t from-sky-600 via-sky-400 to-cyan-200 transition-all duration-75"
+                style={{ height: `${inPct}%` }}
+              />
+            </div>
+            <span className="text-[7px] font-mono text-sky-300 truncate">{inDbLabel}</span>
+          </div>
+
+          {/* GR METER (Gain Reduction fills from top down) */}
+          <div className="flex flex-col items-center h-full w-4 justify-between">
+            <span className="text-[8px] font-mono text-rose-400 font-bold">GR</span>
+            <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-start p-[1px] my-1">
+              <div
+                className="w-full rounded-full bg-gradient-to-b from-rose-500 to-amber-500 transition-all duration-75"
+                style={{ height: `${grPct}%` }}
+              />
+            </div>
+            <span className="text-[7px] font-mono text-rose-300 truncate">
+              {grDb > 0.1 ? `-${grDb.toFixed(0)}` : '0'}
+            </span>
+          </div>
+
+          {/* OUT METER */}
+          <div className="flex flex-col items-center h-full w-4 justify-between">
+            <span className="text-[8px] font-mono text-emerald-400 font-bold">OUT</span>
+            <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-end p-[1px] my-1">
+              <div
+                className="w-full rounded-full transition-all duration-75"
+                style={{
+                  height: `${outPct}%`,
+                  background:
+                    outPct > 90
+                      ? 'linear-gradient(to top, #10b981 0%, #f59e0b 75%, #ef4444 100%)'
+                      : 'linear-gradient(to top, #059669 0%, #10b981 70%, #34d399 100%)',
+                }}
+              />
+            </div>
+            <span className="text-[7px] font-mono text-emerald-300 truncate">{outDbLabel}</span>
+          </div>
+        </div>
+
+        <span className="text-[8px] font-mono text-slate-500">PRE/DSP</span>
+      </div>
+    );
+  }
 
   if (compact) {
     return (

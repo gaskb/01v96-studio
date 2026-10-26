@@ -18,12 +18,13 @@ interface InteractiveEQProps {
   meterOut?: number;
   grDb?: number;
   compact?: boolean;
+  graphOnly?: boolean;
   onChange: (param: string, value: number | boolean) => void;
 }
 
-type BandKey = 'low' | 'lowMid' | 'hiMid' | 'high';
+export type BandKey = 'low' | 'lowMid' | 'hiMid' | 'high';
 
-const BAND_CONFIG: {
+export const BAND_CONFIG: {
   key: BandKey;
   label: string;
   color: string;
@@ -150,6 +151,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
   meterOut = 0,
   grDb = 0,
   compact = false,
+  graphOnly = false,
   onChange,
 }) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -157,10 +159,10 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
   const dragOriginRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [selectedBand, setSelectedBand] = useState<BandKey>('lowMid');
 
-  const width = 560;
-  const height = compact ? 156 : 176;
-  const padX = 34;
-  const padY = 16;
+  const width = 480;
+  const height = compact ? 116 : 140;
+  const padX = 26;
+  const padY = 12;
   const plotW = width - padX * 2;
   const plotH = height - padY * 2;
 
@@ -338,14 +340,26 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
           </button>
         </div>
 
-        {/* Live IN/OUT Meter Bridge */}
-        <InOutMeterBridge meterIn={meterIn} meterOut={meterOut} grDb={grDb} compact />
+        {/* Live IN/OUT Meter Bridge (only if not graphOnly) */}
+        {!graphOnly && (
+          <InOutMeterBridge meterIn={meterIn} meterOut={meterOut} grDb={grDb} compact />
+        )}
       </div>
 
-      {/* SIDE-BY-SIDE LAYOUT: Left = SVG Filter Curve, Right = 4 Band Parameter Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch">
+      {/* SIDE-BY-SIDE LAYOUT: Left = SVG Filter Curve, Right = 4 Band Parameter Cards (or Graph Only) */}
+      <div
+        className={
+          graphOnly
+            ? 'w-full flex flex-col items-stretch'
+            : 'grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-stretch'
+        }
+      >
         {/* Interactive SVG Frequency Response Curve */}
-        <div className="lg:col-span-5 relative w-full overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f] flex items-center">
+        <div
+          className={`${
+            graphOnly ? 'w-full' : 'lg:col-span-5'
+          } relative overflow-hidden rounded-lg border border-slate-800/90 bg-[#070a0f] flex items-center`}
+        >
           <svg
             ref={svgRef}
             viewBox={`0 0 ${width} ${height}`}
@@ -504,11 +518,12 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
         </div>
 
         {/* 4 Band Parameter Cards: Either Rotary Potentiometers (Knobs) or Linear Sliders */}
-        <div
-          className={`lg:col-span-7 grid ${
-            compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'
-          } gap-2 content-between`}
-        >
+        {!graphOnly && (
+          <div
+            className={`lg:col-span-7 grid ${
+              compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'
+            } gap-2 content-between`}
+          >
           {BAND_CONFIG.map((b) => {
             const state = eq[b.key];
             const savedBand = savedEq?.[b.key];
@@ -723,6 +738,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
             );
           })}
         </div>
+      )}
       </div>
     </div>
   );
