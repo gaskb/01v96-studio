@@ -27,6 +27,7 @@ import {
 import { LayoutToolbar } from './channel-layout/LayoutToolbar';
 import { ChannelLayoutConfig, WidgetId, WidgetLayoutItem } from './channel-layout/layoutTypes';
 import { ModularWidgetCard } from './channel-layout/ModularWidgetCard';
+import { ChannelStripPanel } from './ChannelStripPanel';
 
 interface SelectedChannelRackProps {
   channel: InputChannelState;
@@ -350,6 +351,19 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
     setDraggedId(null);
     setDragOverId(null);
   };
+
+  // If in SLIDERS mode and not currently editing layout, display the classic v0.3.0 ChannelStripPanel
+  if (controlMode === 'sliders' && !isEditMode) {
+    return (
+      <ChannelStripPanel
+        channel={channel}
+        savedChannel={savedChannel}
+        controlMode={controlMode}
+        onChangeControlMode={onChangeControlMode}
+        sendCommand={sendCommand}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1.5 bg-[#0c1018] border border-cyan-500/40 rounded-2xl p-2 shadow-[0_0_20px_rgba(6,182,212,0.08)] select-none h-full min-h-0">

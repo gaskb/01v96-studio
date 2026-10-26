@@ -106,29 +106,29 @@ export const ModularWidgetCard: React.FC<ModularWidgetCardProps> = ({
           : ''
       } ${
         isEditMode
-          ? 'border-2 border-dashed border-amber-500/70 hover:border-amber-400 bg-slate-900/90 shadow-md p-2'
-          : ''
+          ? 'overflow-visible z-20 hover:z-30 min-h-fit border-2 border-dashed border-amber-500/70 hover:border-amber-400 bg-slate-900/95 shadow-lg p-1.5'
+          : 'overflow-hidden'
       } ${isResizing ? 'select-none ring-2 ring-amber-400' : ''}`}
     >
-      {/* EDIT MODE: INGOMBRO PLACEHOLDER ONLY (CONTROLS HIDDEN TO AVOID OVERFLOW) */}
+      {/* EDIT MODE: CLEAN FOOTPRINT WITH CONTROLS ALWAYS VISIBLE (WRAPPING AS NEEDED) */}
       {isEditMode ? (
         <div
           draggable
           onDragStart={(e) => onDragStart(item.id, e)}
           onDragEnd={onDragEnd}
-          className="flex-1 flex flex-col justify-between gap-1.5 cursor-grab active:cursor-grabbing select-none"
+          className="flex-1 flex flex-col overflow-visible cursor-grab active:cursor-grabbing select-none"
         >
-          {/* Top Bar: Large Grip + Name + Visibility */}
-          <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-amber-400 text-base font-bold tracking-tighter" title="Trascina nello spazio griglia">
+          {/* Header Row: Grip + Dot + ShortName + Visibility Button */}
+          <div className="flex items-center justify-between gap-1 border-b border-slate-800/80 pb-1 mb-1 shrink-0 w-full min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-amber-400 text-xs font-bold shrink-0" title="Trascina nello spazio griglia per spostare">
                 ⠿
               </span>
               <span
-                className="w-3 h-3 rounded-full shrink-0 shadow-sm"
+                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
                 style={{ backgroundColor: meta?.color || '#38bdf8' }}
               />
-              <span className="font-bold text-xs sm:text-sm text-slate-100 truncate tracking-wide" title={meta?.name || item.id}>
+              <span className="font-bold text-xs text-slate-100 truncate tracking-wide" title={meta?.name || item.id}>
                 {meta?.shortName || item.id}
               </span>
             </div>
@@ -138,9 +138,9 @@ export const ModularWidgetCard: React.FC<ModularWidgetCardProps> = ({
                 e.stopPropagation();
                 onUpdateItem({ ...item, visible: !item.visible });
               }}
-              className={`px-2 py-0.5 rounded text-xs font-bold cursor-pointer transition ${
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition shrink-0 ${
                 item.visible
-                  ? 'bg-slate-950 border border-slate-700 text-slate-200 hover:text-white'
+                  ? 'bg-slate-950 border border-slate-700 text-slate-300 hover:text-white'
                   : 'bg-rose-950/70 border border-rose-800 text-rose-300'
               }`}
               title={item.visible ? 'Nascondi modulo' : 'Mostra modulo'}
@@ -149,138 +149,125 @@ export const ModularWidgetCard: React.FC<ModularWidgetCardProps> = ({
             </button>
           </div>
 
-          {/* Center: Footprint & Dimensions Summary */}
-          <div className="flex-1 flex flex-col items-center justify-center py-1">
-            <div className="flex flex-wrap items-center justify-center gap-2 bg-slate-950/80 border border-slate-800/90 px-2.5 py-1 rounded-lg">
-              <span className="text-xs font-mono font-bold text-emerald-300">
-                W: {colSpan}
-              </span>
-              <span className="text-slate-600 text-xs">×</span>
-              <span className="text-xs font-mono font-bold text-purple-300">
-                H: {rowSpan}
-              </span>
-              <span className="text-[10px] font-mono text-slate-400 border-l border-slate-800 pl-2">
-                (X:{colStart}, Y:{rowStart})
-              </span>
+          {/* Steppers & Controls: Wrapping freely so all commands are ALWAYS visible and accessible */}
+          <div className="flex flex-wrap items-center gap-1 w-full text-[10px] font-mono">
+              {/* Position X (Col Start) */}
+              <div className="flex items-center bg-slate-950 border border-slate-800 rounded px-1 py-0.5 gap-0.5" title="Posizione orizzontale (colonna)">
+                <span className="text-slate-500 font-bold">X</span>
+                <button
+                  disabled={colStart <= 1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, colStart: Math.max(1, colStart - 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Sposta a sinistra"
+                >
+                  ◀
+                </button>
+                <span className="text-amber-300 font-bold min-w-[14px] text-center">{colStart}</span>
+                <button
+                  disabled={colStart + colSpan - 1 >= gridCols}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, colStart: Math.min(gridCols - colSpan + 1, colStart + 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Sposta a destra"
+                >
+                  ▶
+                </button>
+              </div>
+
+              {/* Position Y (Row Start) */}
+              <div className="flex items-center bg-slate-950 border border-slate-800 rounded px-1 py-0.5 gap-0.5" title="Posizione verticale (riga)">
+                <span className="text-slate-500 font-bold">Y</span>
+                <button
+                  disabled={rowStart <= 1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, rowStart: Math.max(1, rowStart - 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Sposta in alto"
+                >
+                  ▲
+                </button>
+                <span className="text-cyan-300 font-bold min-w-[12px] text-center">{rowStart}</span>
+                <button
+                  disabled={rowStart + rowSpan - 1 >= gridRows}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, rowStart: Math.min(gridRows - rowSpan + 1, rowStart + 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Sposta in basso"
+                >
+                  ▼
+                </button>
+              </div>
+
+              {/* Width (W) */}
+              <div className="flex items-center bg-slate-950 border border-slate-800 rounded px-1 py-0.5 gap-0.5" title="Larghezza in colonne">
+                <span className="text-slate-500 font-bold">W</span>
+                <button
+                  disabled={colSpan <= 1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, colSpan: Math.max(1, colSpan - 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Riduci larghezza"
+                >
+                  -
+                </button>
+                <span className="text-emerald-300 font-bold min-w-[14px] text-center">{colSpan}</span>
+                <button
+                  disabled={colStart + colSpan - 1 >= gridCols}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, colSpan: Math.min(gridCols - colStart + 1, colSpan + 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Aumenta larghezza"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Height (H) */}
+              <div className="flex items-center bg-slate-950 border border-slate-800 rounded px-1 py-0.5 gap-0.5" title="Altezza in righe">
+                <span className="text-slate-500 font-bold">H</span>
+                <button
+                  disabled={rowSpan <= 1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, rowSpan: Math.max(1, rowSpan - 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Riduci altezza"
+                >
+                  -
+                </button>
+                <span className="text-purple-300 font-bold min-w-[12px] text-center">{rowSpan}</span>
+                <button
+                  disabled={rowStart + rowSpan - 1 >= gridRows}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdateItem({ ...item, rowSpan: Math.min(gridRows - rowStart + 1, rowStart + 1) });
+                  }}
+                  className="w-4 h-4 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold"
+                  title="Aumenta altezza"
+                >
+                  +
+                </button>
+              </div>
             </div>
+
+            {/* Body Area: clean empty blueprint background */}
+            <div className="flex-1 min-h-0" />
           </div>
-
-          {/* Bottom Bar: Large Ergonomic Position & Dimension Buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-1 text-xs font-mono border-t border-slate-800 pt-1.5">
-            {/* Position X (Col Start) */}
-            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-0.5 gap-1">
-              <span className="text-slate-400 font-bold">X:</span>
-              <button
-                disabled={colStart <= 1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, colStart: Math.max(1, colStart - 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Sposta a sinistra"
-              >
-                ◀
-              </button>
-              <span className="text-amber-300 font-bold min-w-[16px] text-center">{colStart}</span>
-              <button
-                disabled={colStart + colSpan - 1 >= gridCols}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, colStart: Math.min(gridCols - colSpan + 1, colStart + 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Sposta a destra"
-              >
-                ▶
-              </button>
-            </div>
-
-            {/* Position Y (Row Start) */}
-            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-0.5 gap-1">
-              <span className="text-slate-400 font-bold">Y:</span>
-              <button
-                disabled={rowStart <= 1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, rowStart: Math.max(1, rowStart - 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Sposta in alto"
-              >
-                ▲
-              </button>
-              <span className="text-cyan-300 font-bold min-w-[12px] text-center">{rowStart}</span>
-              <button
-                disabled={rowStart + rowSpan - 1 >= gridRows}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, rowStart: Math.min(gridRows - rowSpan + 1, rowStart + 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Sposta in basso"
-              >
-                ▼
-              </button>
-            </div>
-
-            {/* Width (W) */}
-            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-0.5 gap-1">
-              <span className="text-slate-400 font-bold">W:</span>
-              <button
-                disabled={colSpan <= 1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, colSpan: Math.max(1, colSpan - 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Riduci larghezza"
-              >
-                -
-              </button>
-              <span className="text-emerald-300 font-bold min-w-[16px] text-center">{colSpan}</span>
-              <button
-                disabled={colStart + colSpan - 1 >= gridCols}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, colSpan: Math.min(gridCols - colStart + 1, colSpan + 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Aumenta larghezza"
-              >
-                +
-              </button>
-            </div>
-
-            {/* Height (H) */}
-            <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg px-1.5 py-0.5 gap-1">
-              <span className="text-slate-400 font-bold">H:</span>
-              <button
-                disabled={rowSpan <= 1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, rowSpan: Math.max(1, rowSpan - 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Riduci altezza"
-              >
-                -
-              </button>
-              <span className="text-purple-300 font-bold min-w-[12px] text-center">{rowSpan}</span>
-              <button
-                disabled={rowStart + rowSpan - 1 >= gridRows}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdateItem({ ...item, rowSpan: Math.min(gridRows - rowStart + 1, rowSpan + 1) });
-                }}
-                className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-white disabled:opacity-20 cursor-pointer font-bold text-xs"
-                title="Aumenta altezza"
-              >
-                +
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
+        ) : (
         /* NORMAL MODE: FULL LIVE WIDGET CONTENT */
         <div className="flex-1 min-h-0 flex flex-col justify-between">
           {children}
