@@ -9,6 +9,7 @@ interface LayoutToolbarProps {
   onSelectPreset: (preset: ChannelLayoutConfig) => void;
   onResetDefault: () => void;
   onApplyCustomJson: (jsonStr: string) => boolean;
+  onChangeGridDimensions?: (cols: number, rows: number) => void;
 }
 
 export const LayoutToolbar: React.FC<LayoutToolbarProps> = ({
@@ -18,11 +19,15 @@ export const LayoutToolbar: React.FC<LayoutToolbarProps> = ({
   onSelectPreset,
   onResetDefault,
   onApplyCustomJson,
+  onChangeGridDimensions,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [jsonDraft, setJsonDraft] = useState('');
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const gridCols = layout.gridCols || 24;
+  const gridRows = layout.gridRows || 4;
 
   const handleOpenExport = () => {
     setJsonDraft(JSON.stringify(layout, null, 2));
@@ -95,6 +100,53 @@ export const LayoutToolbar: React.FC<LayoutToolbarProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Grid Dimensions Stepper: Cols (12..36) & Righe (1..6) */}
+            <div className="flex items-center gap-2 bg-slate-950/80 border border-amber-900/60 rounded-lg px-2 py-1 text-xs font-mono">
+              <div className="flex items-center gap-1">
+                <span className="text-amber-400 font-bold text-[10px]">Cols:</span>
+                <button
+                  disabled={gridCols <= 12}
+                  onClick={() => onChangeGridDimensions?.(Math.max(12, gridCols - 1), gridRows)}
+                  className="w-4 h-4 flex items-center justify-center bg-slate-900 hover:bg-slate-800 disabled:opacity-20 rounded text-slate-200 cursor-pointer font-bold text-xs"
+                  title="Riduci larghezza griglia (min: 12)"
+                >
+                  -
+                </button>
+                <span className="text-amber-300 font-bold min-w-[18px] text-center">{gridCols}</span>
+                <button
+                  disabled={gridCols >= 36}
+                  onClick={() => onChangeGridDimensions?.(Math.min(36, gridCols + 1), gridRows)}
+                  className="w-4 h-4 flex items-center justify-center bg-slate-900 hover:bg-slate-800 disabled:opacity-20 rounded text-slate-200 cursor-pointer font-bold text-xs"
+                  title="Aumenta larghezza griglia (max: 36)"
+                >
+                  +
+                </button>
+              </div>
+
+              <span className="text-slate-700">|</span>
+
+              <div className="flex items-center gap-1">
+                <span className="text-cyan-400 font-bold text-[10px]">Righe:</span>
+                <button
+                  disabled={gridRows <= 1}
+                  onClick={() => onChangeGridDimensions?.(gridCols, Math.max(1, gridRows - 1))}
+                  className="w-4 h-4 flex items-center justify-center bg-slate-900 hover:bg-slate-800 disabled:opacity-20 rounded text-slate-200 cursor-pointer font-bold text-xs"
+                  title="Riduci altezza griglia (min: 1)"
+                >
+                  -
+                </button>
+                <span className="text-cyan-300 font-bold min-w-[14px] text-center">{gridRows}</span>
+                <button
+                  disabled={gridRows >= 6}
+                  onClick={() => onChangeGridDimensions?.(gridCols, Math.min(6, gridRows + 1))}
+                  className="w-4 h-4 flex items-center justify-center bg-slate-900 hover:bg-slate-800 disabled:opacity-20 rounded text-slate-200 cursor-pointer font-bold text-xs"
+                  title="Aumenta altezza griglia (max: 6)"
+                >
+                  +
+                </button>
+              </div>
             </div>
 
             {/* Reset Button */}

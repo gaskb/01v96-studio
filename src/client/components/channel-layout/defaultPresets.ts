@@ -1,6 +1,6 @@
 import { ChannelLayoutConfig, WIDGET_META_MAP, WidgetId, WidgetLayoutItem } from './layoutTypes';
 
-export const STORAGE_KEY_LAYOUT = '01v96_channel_layout_v4';
+export const STORAGE_KEY_LAYOUT = '01v96_channel_layout_v5';
 
 export const ALL_CORE_WIDGET_IDS: WidgetId[] = [
   'meter_vertical',
@@ -21,6 +21,8 @@ export const ALL_CORE_WIDGET_IDS: WidgetId[] = [
 
 export const PRESET_USER_MOCKUP: ChannelLayoutConfig = {
   presetName: 'Studio Console Integrata (Spazio 4x24)',
+  gridCols: 24,
+  gridRows: 4,
   items: [
     { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 1, rowSpan: 4, visible: true },
     { id: 'eq_graph', colStart: 2, rowStart: 1, colSpan: 8, rowSpan: 2, visible: true },
@@ -41,6 +43,8 @@ export const PRESET_USER_MOCKUP: ChannelLayoutConfig = {
 
 export const PRESET_CLASSIC_4COL: ChannelLayoutConfig = {
   presetName: 'Bande Separate & Dinamiche (4x24)',
+  gridCols: 24,
+  gridRows: 4,
   items: [
     { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 1, rowSpan: 4, visible: true },
     { id: 'eq_graph', colStart: 2, rowStart: 1, colSpan: 7, rowSpan: 2, visible: true },
@@ -61,6 +65,8 @@ export const PRESET_CLASSIC_4COL: ChannelLayoutConfig = {
 
 export const PRESET_EQ_FOCUS: ChannelLayoutConfig = {
   presetName: 'Focus EQ Spettro Wide (4x24)',
+  gridCols: 24,
+  gridRows: 4,
   items: [
     { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 1, rowSpan: 4, visible: true },
     { id: 'eq_graph', colStart: 2, rowStart: 1, colSpan: 10, rowSpan: 2, visible: true },
@@ -88,8 +94,8 @@ export const BUILTIN_PRESETS: ChannelLayoutConfig[] = [
 /**
  * Normalizes any layout configuration or imported JSON,
  * ensuring all 14 core widgets are present, spans are clamped,
- * and exact coordinates (colStart 1..24, rowStart 1..4) are maintained
- * without forced left-or-top packing.
+ * gridCols is clamped between 12 and 36, gridRows is clamped between 1 and 6,
+ * and exact coordinates are maintained within bounds.
  */
 export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
   if (!input || typeof input !== 'object') {
@@ -97,6 +103,11 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
   }
 
   const raw = input as Partial<ChannelLayoutConfig>;
+  const rawGridCols = Number(raw.gridCols);
+  const gridCols = Math.max(12, Math.min(36, Number.isFinite(rawGridCols) ? rawGridCols : 24));
+  const rawGridRows = Number(raw.gridRows);
+  const gridRows = Math.max(1, Math.min(6, Number.isFinite(rawGridRows) ? rawGridRows : 4));
+
   const rawItems = Array.isArray(raw.items) ? raw.items : [];
 
   const existingIds = new Set<string>();
@@ -115,7 +126,7 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
         for (const b of bands) {
           if (!existingIds.has(b)) {
             existingIds.add(b);
-            normalizedItems.push({ id: b, colStart: 10, rowStart: r++, colSpan: 3, rowSpan: 1, visible: item.visible !== false });
+            normalizedItems.push({ id: b, colStart: 10, rowStart: Math.min(gridRows, r++), colSpan: 3, rowSpan: 1, visible: item.visible !== false });
           }
         }
         continue;
@@ -127,7 +138,7 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
         for (const a of auxes) {
           if (!existingIds.has(a)) {
             existingIds.add(a);
-            normalizedItems.push({ id: a, colStart: 16, rowStart: r++, colSpan: 5, rowSpan: 1, visible: item.visible !== false });
+            normalizedItems.push({ id: a, colStart: 16, rowStart: Math.min(gridRows, r++), colSpan: 5, rowSpan: 1, visible: item.visible !== false });
           }
         }
         continue;
@@ -136,10 +147,10 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
       if (id in WIDGET_META_MAP && !existingIds.has(id)) {
         existingIds.add(id);
         const parsedCol = Number(item.colSpan);
-        const colSpan = Math.max(1, Math.min(24, Number.isFinite(parsedCol) ? parsedCol : 2));
+        const colSpan = Math.max(1, Math.min(gridCols, Number.isFinite(parsedCol) ? parsedCol : 2));
         const defaultHeight = WIDGET_META_MAP[id]?.defaultHeight || 1;
         const parsedRow = Number(item.rowSpan);
-        const rowSpan = Math.max(1, Math.min(4, Number.isFinite(parsedRow) && parsedRow > 0 ? parsedRow : defaultHeight));
+        const rowSpan = Math.max(1, Math.min(gridRows, Number.isFinite(parsedRow) && parsedRow > 0 ? parsedRow : Math.min(gridRows, defaultHeight)));
 
         const defaultItem = PRESET_USER_MOCKUP.items.find((i) => i.id === id);
         const rawColStart = Number(item.colStart);
@@ -148,7 +159,7 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
         const colStart = Math.max(
           1,
           Math.min(
-            25 - colSpan,
+            gridCols - colSpan + 1,
             Number.isFinite(rawColStart) && rawColStart >= 1 ? rawColStart : (defaultItem?.colStart || 1)
           )
         );
@@ -156,7 +167,7 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
         const rowStart = Math.max(
           1,
           Math.min(
-            5 - rowSpan,
+            gridRows - rowSpan + 1,
             Number.isFinite(rawRowStart) && rawRowStart >= 1 ? rawRowStart : (defaultItem?.rowStart || 1)
           )
         );
@@ -180,16 +191,25 @@ export function normalizeLayout(input?: unknown): ChannelLayoutConfig {
     if (!existingIds.has(wid)) {
       const defaultItem = PRESET_USER_MOCKUP.items.find((i) => i.id === wid);
       const meta = WIDGET_META_MAP[wid];
+      const rowSpan = Math.min(gridRows, meta?.defaultHeight || 1);
       normalizedItems.push(
         defaultItem
-          ? { ...defaultItem }
-          : { id: wid, colStart: 1, rowStart: 1, colSpan: 2, rowSpan: meta?.defaultHeight || 1, visible: true }
+          ? {
+              ...defaultItem,
+              colSpan: Math.min(gridCols, defaultItem.colSpan),
+              rowSpan: Math.min(gridRows, defaultItem.rowSpan || 1),
+              colStart: Math.min(gridCols - Math.min(gridCols, defaultItem.colSpan) + 1, defaultItem.colStart || 1),
+              rowStart: Math.min(gridRows - Math.min(gridRows, defaultItem.rowSpan || 1) + 1, defaultItem.rowStart || 1),
+            }
+          : { id: wid, colStart: 1, rowStart: 1, colSpan: 2, rowSpan, visible: true }
       );
     }
   }
 
   return {
-    presetName: typeof raw.presetName === 'string' ? raw.presetName : 'Personalizzato (4x24)',
+    presetName: typeof raw.presetName === 'string' ? raw.presetName : `Personalizzato (${gridRows}x${gridCols})`,
+    gridCols,
+    gridRows,
     items: normalizedItems,
   };
 }

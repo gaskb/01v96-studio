@@ -24,12 +24,20 @@ export interface WidgetCommonProps {
  */
 export const WidgetVerticalMeters: React.FC<WidgetCommonProps> = ({ ch }) => {
   return (
-    <InOutMeterBridge
-      meterIn={ch.meterIn}
-      meterOut={ch.meterOut}
-      grDb={ch.grDb}
-      vertical={true}
-    />
+    <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1.5 flex flex-col justify-between h-full select-none shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-slate-850/80 pb-0.5 px-0.5">
+        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+        <span className="text-[10px] font-mono font-bold text-cyan-400">METERS</span>
+      </div>
+      <div className="flex-1 flex items-center justify-center min-h-0 pt-0.5">
+        <InOutMeterBridge
+          meterIn={ch.meterIn}
+          meterOut={ch.meterOut}
+          grDb={ch.grDb}
+          vertical={true}
+        />
+      </div>
+    </div>
   );
 };
 
@@ -71,12 +79,10 @@ export const WidgetAuxSends: React.FC<WidgetCommonProps> = ({
 }) => {
   return (
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1.5 flex flex-col gap-1 justify-between h-full select-none shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-0.5 px-0.5">
+      <div className="flex items-center gap-1.5 border-b border-slate-800/80 pb-0.5 px-0.5">
+        <span className="w-2 h-2 rounded-full bg-amber-400" />
         <span className="text-[10px] font-mono font-bold text-amber-400">
           AUX SENDS
-        </span>
-        <span className="text-[9px] font-mono text-slate-400">
-          1 — 8
         </span>
       </div>
 
@@ -171,12 +177,10 @@ export const WidgetEqBands: React.FC<WidgetCommonProps> = ({
 
   return (
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-2 flex flex-col gap-1.5 justify-between h-full shadow-sm select-none">
-      <div className="flex items-center justify-between border-b border-slate-800/80 pb-0.5">
+      <div className="flex items-center gap-1.5 border-b border-slate-800/80 pb-0.5">
+        <span className="w-2 h-2 rounded-full bg-purple-400" />
         <span className="text-[10px] font-mono font-bold text-purple-400">
           4-BAND EQ (CH {ch.id})
-        </span>
-        <span className="text-[9px] font-mono text-slate-400">
-          HIGH ➔ LOW
         </span>
       </div>
 
@@ -548,9 +552,9 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-2 flex flex-col gap-1.5 justify-between h-full select-none shadow-sm">
       {/* SECTION A: PREAMP (ATTEN & PAN) */}
       <div className="bg-[#05080e] border border-slate-850 rounded p-1 flex flex-col gap-1">
-        <div className="flex items-center justify-between border-b border-slate-850/80 pb-0.5 px-0.5">
+        <div className="flex items-center gap-1.5 border-b border-slate-850/80 pb-0.5 px-0.5">
+          <span className="w-2 h-2 rounded-full bg-cyan-400" />
           <span className="text-[10px] font-mono font-bold text-cyan-400">PREAMP</span>
-          <span className="text-[9px] font-mono text-slate-400">ATTEN & PAN</span>
         </div>
         <div className="flex items-center justify-around gap-1.5 py-0.5">
           <RotaryKnob
@@ -780,10 +784,11 @@ export const WidgetVerticalRouting: React.FC<WidgetCommonProps> = ({
   sendCommand,
 }) => {
   return (
-    <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1.5 flex flex-col items-center justify-between h-full select-none shadow-sm">
-      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-tighter">
-        ROUTING
-      </span>
+    <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-1.5 flex flex-col justify-between h-full select-none shadow-sm">
+      <div className="flex items-center gap-1.5 border-b border-slate-850/80 pb-0.5 px-0.5">
+        <span className="w-2 h-2 rounded-full bg-rose-500" />
+        <span className="text-[10px] font-mono font-bold text-rose-400">ROUTING</span>
+      </div>
 
       {/* Vertical Buttons Stack: One per row */}
       <div className="flex flex-col items-center gap-0.5 w-full my-0.5">
@@ -888,9 +893,9 @@ export const WidgetPreampAttenPan: React.FC<WidgetCommonProps> = ({
 }) => {
   return (
     <div className="bg-[#070a0f] border border-slate-800/90 rounded-xl p-2 flex flex-col gap-1 justify-between h-full select-none shadow-sm">
-      <div className="flex items-center justify-between border-b border-slate-850/80 pb-0.5 px-0.5">
+      <div className="flex items-center gap-1.5 border-b border-slate-850/80 pb-0.5 px-0.5">
+        <span className="w-2 h-2 rounded-full bg-cyan-400" />
         <span className="text-[10px] font-mono font-bold text-cyan-400">PREAMP</span>
-        <span className="text-[9px] font-mono text-slate-400">ATTEN & PAN</span>
       </div>
       <div className="flex flex-col items-center justify-around gap-2 py-1 flex-1">
         <RotaryKnob

@@ -20,16 +20,18 @@ export type WidgetId =
 
 export interface WidgetLayoutItem {
   id: WidgetId;
-  colStart?: number; // 1..24 horizontal coordinate in 4x24 grid
-  rowStart?: number; // 1..4 vertical coordinate in 4x24 grid
-  colSpan: number; // 1..24 width in 24-column grid
-  rowSpan?: number; // 1..4 height units
+  colStart?: number; // 1..gridCols horizontal coordinate in rack grid
+  rowStart?: number; // 1..gridRows vertical coordinate in rack grid
+  colSpan: number; // 1..gridCols width
+  rowSpan?: number; // 1..gridRows height
   visible: boolean;
   minHeight?: number;
 }
 
 export interface ChannelLayoutConfig {
   presetName?: string;
+  gridCols?: number; // 12..36 (default: 24)
+  gridRows?: number; // 1..6 (default: 4)
   items: WidgetLayoutItem[];
 }
 

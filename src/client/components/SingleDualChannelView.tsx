@@ -202,6 +202,8 @@ const FullChannelColumn: React.FC<{
   isSelected: boolean;
   sendCommand: (cmd: ClientCommand) => void;
   layout: ChannelLayoutConfig;
+  gridCols: number;
+  gridRows: number;
   isEditMode: boolean;
   draggedId: string | null;
   dragOverId: string | null;
@@ -218,6 +220,8 @@ const FullChannelColumn: React.FC<{
   isSelected,
   sendCommand,
   layout,
+  gridCols,
+  gridRows,
   isEditMode,
   draggedId,
   dragOverId,
@@ -288,21 +292,21 @@ const FullChannelColumn: React.FC<{
         </button>
       </div>
 
-      {/* Right Column: Dynamic Modular 4x24 Grid */}
+      {/* Right Column: Dynamic Modular Grid */}
       <div className="flex-1 flex flex-col gap-2.5 min-w-0">
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
-            gridTemplateRows: 'repeat(4, minmax(52px, 1fr))',
+            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${gridRows}, minmax(52px, 1fr))`,
             position: 'relative',
           }}
           className="gap-2.5 min-h-[220px]"
         >
-          {/* 4x24 Background Drop Grid Cells (Visible in Edit Mode) */}
+          {/* Background Drop Grid Cells (Visible in Edit Mode) */}
           {isEditMode &&
-            Array.from({ length: 4 }).map((_, rIdx) =>
-              Array.from({ length: 24 }).map((_, cIdx) => {
+            Array.from({ length: gridRows }).map((_, rIdx) =>
+              Array.from({ length: gridCols }).map((_, cIdx) => {
                 const row = rIdx + 1;
                 const col = cIdx + 1;
                 return (
@@ -339,6 +343,8 @@ const FullChannelColumn: React.FC<{
               <ModularWidgetCard
                 key={item.id}
                 item={item}
+                gridCols={gridCols}
+                gridRows={gridRows}
                 isEditMode={isEditMode}
                 isDragging={draggedId === item.id}
                 isDragOver={dragOverId === item.id}
@@ -369,6 +375,9 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  const gridCols = layout.gridCols || 24;
+  const gridRows = layout.gridRows || 4;
 
   const selId = state.selectedChannel;
   const baseOddId = selId % 2 === 1 ? selId : selId - 1;
@@ -409,11 +418,30 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
     }
   };
 
+  const handleChangeGridDimensions = (nextCols: number, nextRows: number) => {
+    const clampedItems = layout.items.map((it) => {
+      const colSpan = Math.max(1, Math.min(nextCols, it.colSpan));
+      const rowSpan = Math.max(1, Math.min(nextRows, it.rowSpan || 1));
+      const colStart = Math.max(1, Math.min(nextCols - colSpan + 1, it.colStart || 1));
+      const rowStart = Math.max(1, Math.min(nextRows - rowSpan + 1, it.rowStart || 1));
+      return { ...it, colSpan, rowSpan, colStart, rowStart };
+    });
+    const nextLayout: ChannelLayoutConfig = {
+      ...layout,
+      presetName: `Personalizzato (${nextRows}x${nextCols})`,
+      gridCols: nextCols,
+      gridRows: nextRows,
+      items: clampedItems,
+    };
+    setLayout(nextLayout);
+    saveStoredLayout(nextLayout);
+  };
+
   const handleUpdateItem = (updated: WidgetLayoutItem) => {
     const nextItems = layout.items.map((it) => (it.id === updated.id ? updated : it));
     const nextLayout: ChannelLayoutConfig = {
       ...layout,
-      presetName: 'Personalizzato (4x24)',
+      presetName: `Personalizzato (${gridRows}x${gridCols})`,
       items: nextItems,
     };
     setLayout(nextLayout);
@@ -425,15 +453,15 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
     if (!item) return;
     const colSpan = item.colSpan || 1;
     const rowSpan = item.rowSpan || 1;
-    const newColStart = Math.max(1, Math.min(25 - colSpan, col));
-    const newRowStart = Math.max(1, Math.min(5 - rowSpan, row));
+    const newColStart = Math.max(1, Math.min(gridCols - colSpan + 1, col));
+    const newRowStart = Math.max(1, Math.min(gridRows - rowSpan + 1, row));
 
     const nextItems = layout.items.map((it) =>
       it.id === id ? { ...it, colStart: newColStart, rowStart: newRowStart } : it
     );
     const nextLayout: ChannelLayoutConfig = {
       ...layout,
-      presetName: 'Personalizzato (4x24)',
+      presetName: `Personalizzato (${gridRows}x${gridCols})`,
       items: nextItems,
     };
     setLayout(nextLayout);
@@ -476,15 +504,15 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
       if (it.id === source.id) {
         return {
           ...it,
-          colStart: Math.min(25 - it.colSpan, tCol),
-          rowStart: Math.min(5 - (it.rowSpan || 1), tRow),
+          colStart: Math.min(gridCols - it.colSpan + 1, tCol),
+          rowStart: Math.min(gridRows - (it.rowSpan || 1) + 1, tRow),
         };
       }
       if (it.id === target.id) {
         return {
           ...it,
-          colStart: Math.min(25 - it.colSpan, sCol),
-          rowStart: Math.min(5 - (it.rowSpan || 1), sRow),
+          colStart: Math.min(gridCols - it.colSpan + 1, sCol),
+          rowStart: Math.min(gridRows - (it.rowSpan || 1) + 1, sRow),
         };
       }
       return it;
@@ -492,7 +520,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
 
     const nextLayout: ChannelLayoutConfig = {
       ...layout,
-      presetName: 'Personalizzato (4x24)',
+      presetName: `Personalizzato (${gridRows}x${gridCols})`,
       items: nextItems,
     };
     setLayout(nextLayout);
@@ -614,6 +642,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
         onSelectPreset={handleSelectPreset}
         onResetDefault={handleResetDefault}
         onApplyCustomJson={handleApplyCustomJson}
+        onChangeGridDimensions={handleChangeGridDimensions}
       />
 
       {/* Main Single or Side-by-Side Dual Channel Deck */}
@@ -626,6 +655,8 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             isSelected={true}
             sendCommand={sendCommand}
             layout={layout}
+            gridCols={gridCols}
+            gridRows={gridRows}
             isEditMode={isEditMode}
             draggedId={draggedId}
             dragOverId={dragOverId}
@@ -645,6 +676,8 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               isSelected={state.selectedChannel === leftCh.id}
               sendCommand={sendCommand}
               layout={layout}
+              gridCols={gridCols}
+              gridRows={gridRows}
               isEditMode={isEditMode}
               draggedId={draggedId}
               dragOverId={dragOverId}
@@ -662,6 +695,8 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               isSelected={state.selectedChannel === rightCh.id}
               sendCommand={sendCommand}
               layout={layout}
+              gridCols={gridCols}
+              gridRows={gridRows}
               isEditMode={isEditMode}
               draggedId={draggedId}
               dragOverId={dragOverId}

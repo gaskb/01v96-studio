@@ -201,4 +201,55 @@ describe('Channel Modular Layout System (Prototyping Engine - 24 Columns & Split
     expect(clampQ('low', 40, 5)).toBe(42);
     expect(clampQ('hiMid', 38, 5)).toBe(40);
   });
+
+  it('clamps dynamic grid dimensions: gridCols (12..36) and gridRows (1..6)', () => {
+    // Underflow test: gridCols < 12 and gridRows < 1
+    const underflow = normalizeLayout({ gridCols: 5, gridRows: 0, items: [] });
+    expect(underflow.gridCols).toBe(12);
+    expect(underflow.gridRows).toBe(1);
+
+    // Overflow test: gridCols > 36 and gridRows > 6
+    const overflow = normalizeLayout({ gridCols: 48, gridRows: 12, items: [] });
+    expect(overflow.gridCols).toBe(36);
+    expect(overflow.gridRows).toBe(6);
+
+    // Valid custom dimensions
+    const custom = normalizeLayout({ gridCols: 30, gridRows: 5, items: [] });
+    expect(custom.gridCols).toBe(30);
+    expect(custom.gridRows).toBe(5);
+  });
+
+  it('clamps all widget coordinates and spans within dynamic grid dimensions', () => {
+    // Test with small compact grid: 12 cols, 2 rows
+    const compactLayout = {
+      gridCols: 12,
+      gridRows: 2,
+      items: [
+        // Out of bounds colStart and colSpan
+        { id: 'eq_graph', colStart: 10, colSpan: 8, rowStart: 1, rowSpan: 4, visible: true },
+        // Out of bounds rowStart
+        { id: 'meter_vertical', colStart: 1, colSpan: 2, rowStart: 5, rowSpan: 4, visible: true },
+      ],
+    };
+
+    const normalized = normalizeLayout(compactLayout);
+    expect(normalized.gridCols).toBe(12);
+    expect(normalized.gridRows).toBe(2);
+
+    const eqGraph = normalized.items.find((i) => i.id === 'eq_graph');
+    expect(eqGraph).toBeDefined();
+    // colSpan clamped to max gridCols = 12 (8 is valid <= 12)
+    expect(eqGraph?.colSpan).toBe(8);
+    // colStart must not exceed gridCols - colSpan + 1 = 12 - 8 + 1 = 5
+    expect(eqGraph?.colStart).toBeLessThanOrEqual(5);
+    // rowSpan clamped to max gridRows = 2
+    expect(eqGraph?.rowSpan).toBeLessThanOrEqual(2);
+    // rowStart + rowSpan - 1 <= gridRows
+    expect(eqGraph!.rowStart! + eqGraph!.rowSpan! - 1).toBeLessThanOrEqual(2);
+
+    const meters = normalized.items.find((i) => i.id === 'meter_vertical');
+    expect(meters).toBeDefined();
+    expect(meters?.rowSpan).toBeLessThanOrEqual(2);
+    expect(meters!.rowStart! + meters!.rowSpan! - 1).toBeLessThanOrEqual(2);
+  });
 });
