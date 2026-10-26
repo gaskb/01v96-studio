@@ -79,6 +79,9 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
     savedValue !== undefined ? Math.max(0, Math.min(1, (savedValue - min) / range)) : 0;
   const savedAngle = -135 + savedNorm * 270;
 
+  const lastSentRef = useRef(value);
+  lastSentRef.current = value;
+
   useEffect(() => {
     if (!dragging) return;
 
@@ -96,7 +99,8 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
 
       const sensitivity = e.shiftKey ? 260 : 120;
       const nextVal = clamp(dragStartRef.current.startVal + (deltaPx / sensitivity) * range);
-      if (nextVal !== value) {
+      if (nextVal !== lastSentRef.current) {
+        lastSentRef.current = nextVal;
         onChange(nextVal);
       }
     };
@@ -112,7 +116,7 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [dragging, min, max, range, value, onChange]);
+  }, [dragging, min, max, range, onChange]);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();

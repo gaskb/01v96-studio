@@ -113,6 +113,9 @@ export class YamahaUsbTransport {
   private connected = false;
   private onMessageCallback: ((msg: number[]) => void) | null = null;
   private onStatusChangeCallback: ((connected: boolean) => void) | null = null;
+  private sendQueue: Array<{ chunks: Buffer[]; resolve: () => void }> = [];
+  private isProcessingQueue = false;
+  private readonly PACING_MS = 2;
 
   onMessage(cb: (msg: number[]) => void): void {
     this.onMessageCallback = cb;
@@ -191,21 +194,44 @@ export class YamahaUsbTransport {
       for (let i = 0; i < packet.length; i += 64) {
         chunks.push(packet.subarray(i, i + 64));
       }
-
-      const sendNext = (idx: number) => {
-        if (idx >= chunks.length || !this.outEndpoint) {
-          resolve();
-          return;
-        }
-        this.outEndpoint.transfer(chunks[idx], (err) => {
-          if (err) {
-            console.error('[USB OUT Error]', err.message);
-          }
-          sendNext(idx + 1);
-        });
-      };
-      sendNext(0);
+      this.sendQueue.push({ chunks, resolve });
+      this.processQueue();
     });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isProcessingQueue) return;
+    this.isProcessingQueue = true;
+
+    while (this.sendQueue.length > 0) {
+      const item = this.sendQueue.shift();
+      if (!item) break;
+
+      if (!this.connected || !this.outEndpoint) {
+        item.resolve();
+        continue;
+      }
+
+      for (const chunk of item.chunks) {
+        if (!this.outEndpoint) break;
+        await new Promise<void>((resChunk) => {
+          this.outEndpoint!.transfer(chunk, (err) => {
+            if (err) {
+              console.error('[USB OUT Error]', err.message);
+            }
+            resChunk();
+          });
+        });
+      }
+
+      item.resolve();
+
+      if (this.PACING_MS > 0 && this.sendQueue.length > 0) {
+        await new Promise((r) => setTimeout(r, this.PACING_MS));
+      }
+    }
+
+    this.isProcessingQueue = false;
   }
 
   disconnect(): void {
@@ -223,6 +249,11 @@ export class YamahaUsbTransport {
   }
 
   private cleanupDevice(): void {
+    while (this.sendQueue.length > 0) {
+      this.sendQueue.shift()?.resolve();
+    }
+    this.isProcessingQueue = false;
+
     try {
       if (this.iface) {
         this.iface.release(true, () => {

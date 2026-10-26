@@ -16,6 +16,17 @@ import { SystemMenusPanel } from './components/SystemMenusPanel';
 export const App: React.FC = () => {
   const [state, setState] = useState<MixerState | null>(null);
   const [savedState, setSavedState] = useState<MixerState | null>(null);
+  const [liveMeters, setLiveMeters] = useState<{
+    metersIn: Record<string, number>;
+    metersOut: Record<string, number>;
+    grs: Record<string, number>;
+    stereoMeter: number;
+  }>({
+    metersIn: {},
+    metersOut: {},
+    grs: {},
+    stereoMeter: 0,
+  });
   const [controlMode, setControlMode] = useState<ControlMode>(() => {
     const stored = window.localStorage.getItem('01v96_control_mode');
     return stored === 'sliders' ? 'sliders' : 'knobs';
@@ -132,20 +143,11 @@ export const App: React.FC = () => {
               return prev;
             });
           } else if (msg.type === 'meters') {
-            setState((prev) => {
-              if (!prev) return prev;
-              const channels = prev.channels.map((c) => ({
-                ...c,
-                meterIn: msg.metersIn?.[`ch${c.id}`] ?? c.meterIn,
-                meterOut: msg.metersOut?.[`ch${c.id}`] ?? c.meterOut,
-                grDb: msg.grs?.[`ch${c.id}`] ?? c.grDb,
-              }));
-              const stereo = {
-                ...prev.stereo,
-                meterOut: msg.stereoMeter ?? prev.stereo.meterOut,
-                meterIn: msg.stereoMeter ?? prev.stereo.meterIn,
-              };
-              return { ...prev, channels, stereo };
+            setLiveMeters({
+              metersIn: msg.metersIn ?? {},
+              metersOut: msg.metersOut ?? {},
+              grs: msg.grs ?? {},
+              stereoMeter: msg.stereoMeter ?? 0,
             });
           } else if (msg.type === 'wave_frame') {
             setState((prev) => {
@@ -195,8 +197,14 @@ export const App: React.FC = () => {
     );
   }
 
-  const selectedChannelObj =
+  const baseSelectedChannel =
     state.channels.find((c) => c.id === state.selectedChannel) ?? state.channels[0];
+  const selectedChannelObj = {
+    ...baseSelectedChannel,
+    meterIn: liveMeters.metersIn[`ch${baseSelectedChannel.id}`] ?? baseSelectedChannel.meterIn,
+    meterOut: liveMeters.metersOut[`ch${baseSelectedChannel.id}`] ?? baseSelectedChannel.meterOut,
+    grDb: liveMeters.grs[`ch${baseSelectedChannel.id}`] ?? baseSelectedChannel.grDb,
+  };
   const savedSelectedChannelObj =
     state.savedChannels?.find((c) => c.id === state.selectedChannel) ??
     savedState?.channels.find((c) => c.id === state.selectedChannel) ??
@@ -473,7 +481,7 @@ export const App: React.FC = () => {
                         savedFader={isAuxFlip ? savedAuxSendObj?.level : savedCh?.fader}
                         pan={ch.pan}
                         savedPan={savedCh?.pan}
-                        meter={ch.meterOut || ch.meterIn}
+                        meter={liveMeters.metersOut[`ch${ch.id}`] ?? liveMeters.metersIn[`ch${ch.id}`] ?? (ch.meterOut || ch.meterIn)}
                         selected={state.selectedChannel === ch.id}
                         accentColor={isAuxFlip ? 'amber' : ch.id >= 17 ? 'purple' : 'cyan'}
                         onSelect={() => sendCommand({ type: 'select_channel', id: ch.id })}
@@ -601,7 +609,7 @@ export const App: React.FC = () => {
                   savedFader={savedState?.stereo.fader}
                   pan={state.stereo.pan}
                   savedPan={savedState?.stereo.pan}
-                  meter={state.stereo.meterOut}
+                  meter={liveMeters.stereoMeter || state.stereo.meterOut}
                   selected={false}
                   accentColor="rose"
                   onSelect={() => {}}
@@ -629,6 +637,7 @@ export const App: React.FC = () => {
           <SingleDualChannelView
             state={state}
             savedState={savedState}
+            liveMeters={liveMeters}
             controlMode={controlMode}
             onChangeControlMode={handleControlModeChange}
             sendCommand={sendCommand}

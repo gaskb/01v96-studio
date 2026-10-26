@@ -32,6 +32,12 @@ import { FaderStrip } from './FaderStrip';
 interface SingleDualChannelViewProps {
   state: MixerState;
   savedState?: MixerState | null;
+  liveMeters?: {
+    metersIn: Record<string, number>;
+    metersOut: Record<string, number>;
+    grs: Record<string, number>;
+    stereoMeter: number;
+  };
   controlMode: ControlMode;
   onChangeControlMode: (mode: ControlMode) => void;
   sendCommand: (cmd: ClientCommand) => void;
@@ -395,6 +401,7 @@ const FullChannelColumn: React.FC<{
 export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
   state,
   savedState,
+  liveMeters,
   controlMode,
   onChangeControlMode,
   sendCommand,
@@ -409,15 +416,35 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
 
   const selId = state.selectedChannel;
   const baseOddId = selId % 2 === 1 ? selId : selId - 1;
-  const primaryCh = state.channels[selId - 1] ?? state.channels[0];
+  const basePrimaryCh = state.channels[selId - 1] ?? state.channels[0];
+  const primaryCh = {
+    ...basePrimaryCh,
+    meterIn: liveMeters?.metersIn[`ch${basePrimaryCh.id}`] ?? basePrimaryCh.meterIn,
+    meterOut: liveMeters?.metersOut[`ch${basePrimaryCh.id}`] ?? basePrimaryCh.meterOut,
+    grDb: liveMeters?.grs[`ch${basePrimaryCh.id}`] ?? basePrimaryCh.grDb,
+  };
   const savedPrimaryCh =
     state.savedChannels?.[selId - 1] ?? savedState?.channels[selId - 1] ?? state.savedChannels?.[0];
-  const leftCh = state.channels[baseOddId - 1] ?? state.channels[0];
+
+  const baseLeftCh = state.channels[baseOddId - 1] ?? state.channels[0];
+  const leftCh = {
+    ...baseLeftCh,
+    meterIn: liveMeters?.metersIn[`ch${baseLeftCh.id}`] ?? baseLeftCh.meterIn,
+    meterOut: liveMeters?.metersOut[`ch${baseLeftCh.id}`] ?? baseLeftCh.meterOut,
+    grDb: liveMeters?.grs[`ch${baseLeftCh.id}`] ?? baseLeftCh.grDb,
+  };
   const savedLeftCh =
     state.savedChannels?.[baseOddId - 1] ??
     savedState?.channels[baseOddId - 1] ??
     state.savedChannels?.[0];
-  const rightCh = state.channels[baseOddId] ?? state.channels[1];
+
+  const baseRightCh = state.channels[baseOddId] ?? state.channels[1];
+  const rightCh = {
+    ...baseRightCh,
+    meterIn: liveMeters?.metersIn[`ch${baseRightCh.id}`] ?? baseRightCh.meterIn,
+    meterOut: liveMeters?.metersOut[`ch${baseRightCh.id}`] ?? baseRightCh.meterOut,
+    grDb: liveMeters?.grs[`ch${baseRightCh.id}`] ?? baseRightCh.grDb,
+  };
   const savedRightCh =
     state.savedChannels?.[baseOddId] ?? savedState?.channels[baseOddId] ?? state.savedChannels?.[1];
 

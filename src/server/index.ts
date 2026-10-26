@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { API_VERSION, APP_VERSION, ClientCommand, UI_VERSION } from '../shared/types.js';
+import { validateClientCommand } from '../shared/validators.js';
 import { MixerController } from './mixer-controller.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,14 +37,26 @@ export function createServer(port = Number(process.env.PORT) || 8096) {
 
     ws.on('message', async (raw) => {
       try {
-        const parsed = JSON.parse(raw.toString()) as ClientCommand;
-        if (!parsed || typeof parsed.type !== 'string') return;
-        await mixer.handleClientCommand(parsed);
+        let json: unknown;
+        try {
+          json = JSON.parse(raw.toString());
+        } catch {
+          ws.send(JSON.stringify({ type: 'error', message: 'Malformed JSON payload' }));
+          return;
+        }
+
+        const validation = validateClientCommand(json);
+        if (!validation.success) {
+          ws.send(JSON.stringify({ type: 'error', message: `Validation error: ${validation.error}` }));
+          return;
+        }
+
+        await mixer.handleClientCommand(validation.data);
       } catch (err) {
         ws.send(
           JSON.stringify({
             type: 'error',
-            message: err instanceof Error ? err.message : 'Invalid command payload',
+            message: err instanceof Error ? err.message : 'Internal error processing command',
           })
         );
       }
@@ -72,12 +85,12 @@ export function createServer(port = Number(process.env.PORT) || 8096) {
 
   app.post('/api/command', async (req, res) => {
     try {
-      const cmd = req.body as ClientCommand;
-      if (!cmd || typeof cmd.type !== 'string') {
-        res.status(400).json({ error: 'Invalid command payload' });
+      const validation = validateClientCommand(req.body);
+      if (!validation.success) {
+        res.status(400).json({ error: `Validation error: ${validation.error}` });
         return;
       }
-      await mixer.handleClientCommand(cmd);
+      await mixer.handleClientCommand(validation.data);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });

@@ -36,7 +36,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
             <span className="text-[8px] font-mono text-sky-400 font-bold">IN</span>
             <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-end p-[1px] my-1">
               <div
-                className="w-full rounded-full bg-gradient-to-t from-sky-600 via-sky-400 to-cyan-200 transition-all duration-75"
+                className="w-full rounded-full bg-gradient-to-t from-sky-600 via-sky-400 to-cyan-200"
                 style={{ height: `${inPct}%` }}
               />
             </div>
@@ -48,7 +48,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
             <span className="text-[8px] font-mono text-rose-400 font-bold">GR</span>
             <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-start p-[1px] my-1">
               <div
-                className="w-full rounded-full bg-gradient-to-b from-rose-500 to-amber-500 transition-all duration-75"
+                className="w-full rounded-full bg-gradient-to-b from-rose-500 to-amber-500"
                 style={{ height: `${grPct}%` }}
               />
             </div>
@@ -62,7 +62,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
             <span className="text-[8px] font-mono text-emerald-400 font-bold">OUT</span>
             <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-end p-[1px] my-1">
               <div
-                className="w-full rounded-full transition-all duration-75"
+                className="w-full rounded-full"
                 style={{
                   height: `${outPct}%`,
                   background:
@@ -89,7 +89,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
           <span className="text-[9px] font-mono font-bold text-slate-400">IN</span>
           <div className="w-16 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
             <div
-              className="h-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-75"
+              className="h-full bg-gradient-to-r from-sky-500 to-cyan-300"
               style={{ width: `${inPct}%` }}
             />
           </div>
@@ -109,7 +109,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
           <span className="text-[9px] font-mono font-bold text-emerald-400">OUT</span>
           <div className="w-16 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
             <div
-              className="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500 transition-all duration-75"
+              className="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
               style={{ width: `${outPct}%` }}
             />
           </div>
@@ -135,7 +135,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
         <span className="text-[9px] font-mono font-bold text-sky-400 w-7">IN</span>
         <div className="flex-1 h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-[1px]">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-sky-600 via-sky-400 to-cyan-200 transition-all duration-75"
+            className="h-full rounded-full bg-gradient-to-r from-sky-600 via-sky-400 to-cyan-200"
             style={{ width: `${inPct}%` }}
           />
         </div>
@@ -146,7 +146,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
         <span className="text-[9px] font-mono font-bold text-emerald-400 w-7">OUT</span>
         <div className="flex-1 h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-[1px]">
           <div
-            className="h-full rounded-full transition-all duration-75"
+            className="h-full rounded-full"
             style={{
               width: `${outPct}%`,
               background:
@@ -163,7 +163,7 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
         <span className="text-[9px] font-mono font-bold text-rose-400 w-7">GR</span>
         <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800 flex justify-end p-[1px]">
           <div
-            className="h-full rounded-full bg-gradient-to-l from-rose-600 to-amber-500 transition-all duration-75"
+            className="h-full rounded-full bg-gradient-to-l from-rose-600 to-amber-500"
             style={{ width: `${grPct}%` }}
           />
         </div>

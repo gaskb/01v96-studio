@@ -305,7 +305,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         <div className="h-full w-2 py-4 flex flex-col justify-end">
           <div className="w-full h-full bg-[#06080c] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-end p-[1px]">
             <div
-              className="w-full rounded-full transition-all duration-75"
+              className="w-full rounded-full"
               style={{
                 height: `${meterPercent}%`,
                 background:

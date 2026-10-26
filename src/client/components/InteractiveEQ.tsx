@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   eqIndexToFreqHz,
   eqIndexToQValue,
@@ -233,27 +233,49 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
     };
   }, [draggingBand, height, onChange]);
 
-  const numSamples = 135;
-  const combinedPoints: string[] = [];
+  const { combinedPoints, fillPath, linePath } = useMemo(() => {
+    const numSamples = 135;
+    const points: string[] = [];
 
-  for (let i = 0; i <= numSamples; i++) {
-    const x = padX + (i / numSamples) * plotW;
-    const f = xToFreq(x);
-    let eqDb = 0;
-    if (eq.on) {
-      for (const b of BAND_CONFIG) {
-        const state = eq[b.key];
-        const f0 = eqIndexToFreqHz(state.freq);
-        eqDb += calcBandDbAtFreq(f, f0, state.gain / 10, state.q, b.key, eq.lpfOn, eq.hpfOn);
+    for (let i = 0; i <= numSamples; i++) {
+      const x = padX + (i / numSamples) * plotW;
+      const f = xToFreq(x);
+      let eqDb = 0;
+      if (eq.on) {
+        for (const b of BAND_CONFIG) {
+          const state = eq[b.key];
+          const f0 = eqIndexToFreqHz(state.freq);
+          eqDb += calcBandDbAtFreq(f, f0, state.gain / 10, state.q, b.key, eq.lpfOn, eq.hpfOn);
+        }
       }
+      const y = dbToY(eqDb);
+      points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
     }
-    const y = dbToY(eqDb);
-    combinedPoints.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-  }
 
-  const zeroY = dbToY(0);
-  const fillPath = `M ${padX},${zeroY} L ${combinedPoints.join(' L ')} L ${padX + plotW},${zeroY} Z`;
-  const linePath = `M ${combinedPoints.join(' L ')}`;
+    const zeroY = dbToY(0);
+    const fill = `M ${padX},${zeroY} L ${points.join(' L ')} L ${padX + plotW},${zeroY} Z`;
+    const line = `M ${points.join(' L ')}`;
+    return { combinedPoints: points, fillPath: fill, linePath: line };
+  }, [
+    eq.on,
+    eq.lpfOn,
+    eq.hpfOn,
+    eq.low.freq,
+    eq.low.gain,
+    eq.low.q,
+    eq.lowMid.freq,
+    eq.lowMid.gain,
+    eq.lowMid.q,
+    eq.hiMid.freq,
+    eq.hiMid.gain,
+    eq.hiMid.q,
+    eq.high.freq,
+    eq.high.gain,
+    eq.high.q,
+    plotW,
+    padX,
+    height,
+  ]);
 
   const gridFreqs = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
   const gridDbs = [-18, -12, -6, 0, 6, 12, 18];

@@ -1400,7 +1400,7 @@ export class MixerController {
         faderUpdates[ch + 17] = val;
 
         if (this.transport.isConnected()) {
-          this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch, val));
+          await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch, val));
         }
       }
 
@@ -1409,7 +1409,7 @@ export class MixerController {
       if (step >= 180) {
         await this.stopDemoWave();
       }
-    }, 40);
+    }, 60);
   }
 
   public async stopDemoWave(): Promise<void> {
