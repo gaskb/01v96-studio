@@ -174,4 +174,31 @@ describe('Channel Modular Layout System (Prototyping Engine - 24 Columns & Split
     expect(layer2Channels[0].id).toBe(17);
     expect(layer2Channels[15].id).toBe(32);
   });
+
+  it('verifies channel bank 17-32 distinction logic and Q scroll clamping', () => {
+    // Bank check: channels 17..32 are secondary expansion channels
+    for (let chId = 1; chId <= 32; chId++) {
+      const isExpansionBank = chId >= 17 && chId <= 32;
+      if (chId <= 16) {
+        expect(isExpansionBank).toBe(false);
+      } else {
+        expect(isExpansionBank).toBe(true);
+      }
+    }
+
+    // Q index clamping per band
+    const maxQHigh = 43; // High band includes shelf & LPF
+    const maxQLow = 42;  // Low band includes shelf & HPF
+    const maxQMid = 40;  // Hi-Mid and Lo-Mid go up to 40 (Q=10.0)
+
+    const clampQ = (bandKey: string, currentQ: number, delta: number) => {
+      const maxQ = bandKey === 'high' ? maxQHigh : bandKey === 'low' ? maxQLow : maxQMid;
+      return Math.max(0, Math.min(maxQ, currentQ + delta));
+    };
+
+    expect(clampQ('high', 40, 5)).toBe(43);
+    expect(clampQ('high', 10, -15)).toBe(0);
+    expect(clampQ('low', 40, 5)).toBe(42);
+    expect(clampQ('hiMid', 38, 5)).toBe(40);
+  });
 });

@@ -20,12 +20,47 @@ export const App: React.FC = () => {
     const stored = window.localStorage.getItem('01v96_control_mode');
     return stored === 'sliders' ? 'sliders' : 'knobs';
   });
+  const [rackHeight, setRackHeight] = useState<number>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = window.localStorage.getItem('01v96_rack_height_px');
+      if (saved) {
+        const parsed = Number(saved);
+        if (Number.isFinite(parsed) && parsed >= 120 && parsed <= 600) return parsed;
+      }
+    }
+    return 240;
+  });
   const [wsConnected, setWsConnected] = useState(false);
 
   const handleControlModeChange = useCallback((mode: ControlMode) => {
     setControlMode(mode);
     window.localStorage.setItem('01v96_control_mode', mode);
   }, []);
+
+  const handleSplitterMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = rackHeight;
+
+    const onMouseMove = (moveEv: MouseEvent) => {
+      moveEv.preventDefault();
+      const deltaY = moveEv.clientY - startY;
+      const newH = Math.max(120, Math.min(600, startH + deltaY));
+      setRackHeight(newH);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      setRackHeight((curr) => {
+        window.localStorage.setItem('01v96_rack_height_px', String(curr));
+        return curr;
+      });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [rackHeight]);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('console');
   const [layer, setLayer] = useState<MixerLayer>('all32');
   const [faderFlipAux, setFaderFlipAux] = useState<number | null>(null);
@@ -367,7 +402,10 @@ export const App: React.FC = () => {
         {workspaceView === 'console' && (
           <>
             {showChannelStrip && (
-              <div className="shrink-0">
+              <div
+                className="shrink-0 flex flex-col min-h-0"
+                style={{ height: `${rackHeight}px` }}
+              >
                 <SelectedChannelRack
                   channel={selectedChannelObj}
                   savedChannel={savedSelectedChannelObj}
@@ -375,6 +413,32 @@ export const App: React.FC = () => {
                   onChangeControlMode={handleControlModeChange}
                   sendCommand={sendCommand}
                 />
+              </div>
+            )}
+
+            {/* INTERACTIVE VERTICAL SPLITTER BAR BETWEEN RACK AND SLIDERS */}
+            {showChannelStrip && (
+              <div
+                onMouseDown={handleSplitterMouseDown}
+                onDoubleClick={() => {
+                  setRackHeight(240);
+                  window.localStorage.setItem('01v96_rack_height_px', '240');
+                }}
+                className="group relative h-2.5 -my-1 w-full flex items-center justify-center cursor-row-resize select-none z-20"
+                title="Trascina in alto o in basso per ridimensionare il rack o allargare i fader (Doppio click per 240px)"
+              >
+                <div className="w-full h-[1px] bg-slate-800/80 group-hover:bg-amber-400 transition-colors" />
+                <div className="absolute px-3 py-0.5 rounded-full bg-slate-900 border border-slate-700/80 group-hover:border-amber-400 group-hover:bg-amber-950/40 text-slate-400 group-hover:text-amber-300 transition-colors flex items-center gap-1 shadow-sm">
+                  <span className="text-[8px] font-mono tracking-widest text-slate-500 group-hover:text-amber-400">
+                    ••••••
+                  </span>
+                  <span className="text-[8px] font-mono font-bold">
+                    {rackHeight}px
+                  </span>
+                  <span className="text-[8px] font-mono tracking-widest text-slate-500 group-hover:text-amber-400">
+                    ••••••
+                  </span>
+                </div>
               </div>
             )}
 
@@ -405,7 +469,7 @@ export const App: React.FC = () => {
                         savedPan={savedCh?.pan}
                         meter={ch.meterOut || ch.meterIn}
                         selected={state.selectedChannel === ch.id}
-                        accentColor={isAuxFlip ? 'amber' : 'cyan'}
+                        accentColor={isAuxFlip ? 'amber' : ch.id >= 17 ? 'purple' : 'cyan'}
                         onSelect={() => sendCommand({ type: 'select_channel', id: ch.id })}
                         onChangeFader={(val) => {
                           if (isAuxFlip) {

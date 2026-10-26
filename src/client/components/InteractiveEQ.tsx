@@ -462,6 +462,17 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
 
                   <g
                     className="cursor-grab active:cursor-grabbing"
+                    onWheel={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedBand(b.key);
+                      const dir = e.deltaY < 0 ? 1 : -1;
+                      const maxQ = b.key === 'high' ? 43 : b.key === 'low' ? 42 : 40;
+                      const nextQ = Math.max(0, Math.min(maxQ, state.q + dir));
+                      if (nextQ !== state.q) {
+                        onChange(b.qParam, nextQ);
+                      }
+                    }}
                     onPointerDown={(e) => {
                       e.stopPropagation();
                       setSelectedBand(b.key);
@@ -481,6 +492,7 @@ export const InteractiveEQ: React.FC<InteractiveEQProps> = ({
                       );
                     }}
                   >
+                    <title>{`Banda ${b.label}: Trascina = Gain/Freq | Rotella = Q (${formatEqQ(state.q, b.key)}) | Doppio click = Reset`}</title>
                     {isSel && (
                       <circle
                         cx={cx}

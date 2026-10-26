@@ -330,7 +330,7 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-1.5 bg-[#0c1018] border border-cyan-500/40 rounded-2xl p-2 shadow-[0_0_20px_rgba(6,182,212,0.08)] select-none">
+    <div className="flex flex-col gap-1.5 bg-[#0c1018] border border-cyan-500/40 rounded-2xl p-2 shadow-[0_0_20px_rgba(6,182,212,0.08)] select-none h-full min-h-0">
       {/* RACK HEADER BAR */}
       <div className="flex flex-wrap items-center justify-between gap-2 bg-[#070a0f] border border-slate-800/90 rounded-xl px-2.5 py-1 shrink-0">
         {/* Left: Selected Channel Info & Quick Toggles */}
@@ -437,10 +437,10 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(24, minmax(0, 1fr))',
-            gridTemplateRows: 'repeat(4, minmax(52px, 1fr))',
+            gridTemplateRows: 'repeat(4, minmax(0, 1fr))',
             position: 'relative',
           }}
-          className="gap-1.5 min-h-[220px]"
+          className="gap-1.5 flex-1 min-h-0"
         >
           {/* 4x24 Background Drop Grid Cells (Visible in Edit Mode) */}
           {isEditMode &&

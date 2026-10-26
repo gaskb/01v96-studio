@@ -90,17 +90,22 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   const faderPercent = Math.max(0, Math.min(100, (fader / 1023) * 100));
   const meterPercent = Math.max(0, Math.min(100, (meter / 255) * 100));
   const zeroDbPercent = (823 / 1023) * 100; // ~80.45%
+  const isExpansionBank = id >= 17 && id <= 32;
 
   const borderStyle = selected
-    ? 'border-cyan-400 bg-[#131b27] shadow-[0_0_16px_rgba(34,211,238,0.18)]'
-    : 'border-slate-800/90 bg-[#0e131d] hover:border-slate-700';
+    ? isExpansionBank
+      ? 'border-purple-400 bg-[#161224] shadow-[0_0_16px_rgba(192,132,252,0.25)]'
+      : 'border-cyan-400 bg-[#131b27] shadow-[0_0_16px_rgba(34,211,238,0.18)]'
+    : isExpansionBank
+      ? 'border-purple-950/70 bg-[#0f0c18] hover:border-purple-800/60'
+      : 'border-slate-800/90 bg-[#0e131d] hover:border-slate-700';
 
   const capColor =
     accentColor === 'rose'
       ? 'from-rose-500 to-rose-700 border-rose-300'
       : accentColor === 'amber'
         ? 'from-amber-400 to-amber-600 border-amber-200'
-        : accentColor === 'purple'
+        : accentColor === 'purple' || (isExpansionBank && accentColor === 'cyan')
           ? 'from-purple-400 to-purple-600 border-purple-200'
           : 'from-slate-200 to-slate-400 border-white';
 
@@ -117,8 +122,12 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         onClick={onSelect}
         className={`w-full py-0.5 sm:py-1 rounded-md text-[9px] sm:text-[10px] font-mono font-bold tracking-wider uppercase transition cursor-pointer mb-1 ${
           selected
-            ? 'bg-cyan-400 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.6)]'
-            : 'bg-slate-800/90 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+            ? isExpansionBank
+              ? 'bg-purple-400 text-slate-950 shadow-[0_0_10px_rgba(192,132,252,0.7)]'
+              : 'bg-cyan-400 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.6)]'
+            : isExpansionBank
+              ? 'bg-purple-950/80 border border-purple-800/60 text-purple-300 hover:bg-purple-900/80 hover:text-white'
+              : 'bg-slate-800/90 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
         }`}
       >
         {label}
@@ -133,7 +142,9 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
           }
         }}
         title="Doppio click per rinominare sul display del mixer"
-        className={`w-full ${compact ? 'h-5 mb-1' : 'h-6 mb-1.5'} bg-[#070a0f] border border-slate-800 rounded flex items-center justify-center px-0.5 overflow-hidden cursor-pointer`}
+        className={`w-full ${compact ? 'h-5 mb-1' : 'h-6 mb-1.5'} ${
+          isExpansionBank ? 'bg-[#090712] border-purple-900/50' : 'bg-[#070a0f] border-slate-800'
+        } border rounded flex items-center justify-center px-0.5 overflow-hidden cursor-pointer`}
       >
         {editingName ? (
           <input
@@ -152,10 +163,14 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
                 onRename?.(nameDraft);
               }
             }}
-            className="w-full bg-transparent text-center text-[10px] sm:text-[11px] font-mono font-bold text-cyan-300 outline-none"
+            className={`w-full bg-transparent text-center text-[10px] sm:text-[11px] font-mono font-bold ${
+              isExpansionBank ? 'text-purple-300' : 'text-cyan-300'
+            } outline-none`}
           />
         ) : (
-          <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-cyan-200 truncate">
+          <span className={`text-[10px] sm:text-[11px] font-mono font-semibold ${
+            isExpansionBank ? 'text-purple-200' : 'text-cyan-200'
+          } truncate`}>
             {name || `CH${id}`}
           </span>
         )}
@@ -246,14 +261,18 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
           <div className="w-1.5 h-full bg-[#06080d] rounded-full border border-slate-800 relative overflow-hidden">
             {/* Fill level */}
             <div
-              className="absolute bottom-0 left-0 right-0 bg-cyan-500/30 transition-all duration-75"
+              className={`absolute bottom-0 left-0 right-0 ${
+                isExpansionBank ? 'bg-purple-500/35' : 'bg-cyan-500/30'
+              } transition-all duration-75`}
               style={{ height: `${faderPercent}%` }}
             />
           </div>
 
           {/* 0 dB Unity Reference Line */}
           <div
-            className="absolute left-0.5 right-0.5 h-[1.5px] bg-cyan-400/50 pointer-events-none"
+            className={`absolute left-0.5 right-0.5 h-[1.5px] ${
+              isExpansionBank ? 'bg-purple-400/50' : 'bg-cyan-400/50'
+            } pointer-events-none`}
             style={{ bottom: `calc(${zeroDbPercent}% * 0.86 + 14px)` }}
           />
 
@@ -299,7 +318,11 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
       <div
         onDoubleClick={resetFader}
         title="Doppio click per ripristinare il valore salvato nella scena o 0.0 dB"
-        className="w-full py-0.5 bg-[#070a0f] hover:bg-slate-900 border border-slate-800/80 rounded text-center text-[10px] font-mono text-slate-300 hover:text-cyan-300 cursor-pointer transition"
+        className={`w-full py-0.5 ${
+          isExpansionBank
+            ? 'bg-[#090712] hover:bg-purple-950/60 border-purple-900/50 text-purple-300/80 hover:text-purple-200'
+            : 'bg-[#070a0f] hover:bg-slate-900 border-slate-800/80 text-slate-300 hover:text-cyan-300'
+        } border rounded text-center text-[10px] font-mono cursor-pointer transition`}
       >
         {faderToDbString(fader)}
       </div>
