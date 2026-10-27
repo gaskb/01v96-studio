@@ -1,5 +1,5 @@
-export const APP_VERSION = '0.5.2';
-export const UI_VERSION = '0.5.2';
+export const APP_VERSION = '0.5.3';
+export const UI_VERSION = '0.5.3';
 export const API_VERSION = '0.5.1';
 
 export type ControlMode = 'knobs' | 'sliders';

@@ -42,82 +42,92 @@ export const GateCard: React.FC<GateCardProps> = ({
       </div>
 
       {controlMode === 'knobs' ? (
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 py-2">
-          <RotaryKnob
-            label="THRESHOLD"
-            value={channel.gate.threshold}
-            min={-540}
-            max={0}
-            step={5}
-            savedValue={savedChannel?.gate.threshold}
-            defaultValue={-260}
-            displayValue={`${(channel.gate.threshold / 10).toFixed(1)}dB`}
-            color="#f59e0b"
-            size={52}
-            onChange={(val) =>
-              sendCommand({ type: 'set_gate', id: channel.id, param: 'threshold', value: val })
-            }
-          />
-          <RotaryKnob
-            label="RANGE"
-            value={channel.gate.range}
-            min={-700}
-            max={0}
-            step={5}
-            savedValue={savedChannel?.gate.range}
-            defaultValue={-560}
-            displayValue={`${(channel.gate.range / 10).toFixed(1)}dB`}
-            color="#f59e0b"
-            size={52}
-            onChange={(val) =>
-              sendCommand({ type: 'set_gate', id: channel.id, param: 'range', value: val })
-            }
-          />
-          <RotaryKnob
-            label="ATTACK"
-            value={channel.gate.attack}
-            min={0}
-            max={120}
-            step={1}
-            savedValue={savedChannel?.gate.attack}
-            defaultValue={10}
-            displayValue={`${channel.gate.attack}`}
-            color="#f59e0b"
-            size={52}
-            onChange={(val) =>
-              sendCommand({ type: 'set_gate', id: channel.id, param: 'attack', value: val })
-            }
-          />
-          <RotaryKnob
-            label="HOLD"
-            value={channel.gate.hold}
-            min={0}
-            max={215}
-            step={1}
-            savedValue={savedChannel?.gate.hold}
-            defaultValue={10}
-            displayValue={`${channel.gate.hold}`}
-            color="#f59e0b"
-            size={52}
-            onChange={(val) =>
-              sendCommand({ type: 'set_gate', id: channel.id, param: 'hold', value: val })
-            }
-          />
-          <RotaryKnob
-            label="DECAY"
-            value={channel.gate.decay}
-            min={0}
-            max={159}
-            step={1}
-            savedValue={savedChannel?.gate.decay}
-            defaultValue={44}
-            displayValue={`${channel.gate.decay}`}
-            color="#f59e0b"
-            size={52}
-            onChange={(val) =>
-              sendCommand({ type: 'set_gate', id: channel.id, param: 'decay', value: val })
-            }
-          />
+        <div className="grid grid-cols-6 gap-3 py-2">
+          <div className="col-span-3 flex justify-center w-full">
+            <RotaryKnob
+              label="THRESHOLD"
+              value={channel.gate.threshold}
+              min={-540}
+              max={0}
+              step={5}
+              savedValue={savedChannel?.gate.threshold}
+              defaultValue={-260}
+              displayValue={`${(channel.gate.threshold / 10).toFixed(1)}dB`}
+              color="#f59e0b"
+              size={52}
+              onChange={(val) =>
+                sendCommand({ type: 'set_gate', id: channel.id, param: 'threshold', value: val })
+              }
+            />
+          </div>
+          <div className="col-span-3 flex justify-center w-full">
+            <RotaryKnob
+              label="RANGE"
+              value={channel.gate.range}
+              min={-700}
+              max={0}
+              step={5}
+              savedValue={savedChannel?.gate.range}
+              defaultValue={-560}
+              displayValue={`${(channel.gate.range / 10).toFixed(1)}dB`}
+              color="#f59e0b"
+              size={52}
+              onChange={(val) =>
+                sendCommand({ type: 'set_gate', id: channel.id, param: 'range', value: val })
+              }
+            />
+          </div>
+          <div className="col-span-2 flex justify-center w-full">
+            <RotaryKnob
+              label="ATTACK"
+              value={channel.gate.attack}
+              min={0}
+              max={120}
+              step={1}
+              savedValue={savedChannel?.gate.attack}
+              defaultValue={10}
+              displayValue={`${channel.gate.attack}`}
+              color="#f59e0b"
+              size={52}
+              onChange={(val) =>
+                sendCommand({ type: 'set_gate', id: channel.id, param: 'attack', value: val })
+              }
+            />
+          </div>
+          <div className="col-span-2 flex justify-center w-full">
+            <RotaryKnob
+              label="HOLD"
+              value={channel.gate.hold}
+              min={0}
+              max={215}
+              step={1}
+              savedValue={savedChannel?.gate.hold}
+              defaultValue={10}
+              displayValue={`${channel.gate.hold}`}
+              color="#f59e0b"
+              size={52}
+              onChange={(val) =>
+                sendCommand({ type: 'set_gate', id: channel.id, param: 'hold', value: val })
+              }
+            />
+          </div>
+          <div className="col-span-2 flex justify-center w-full">
+            <RotaryKnob
+              label="DECAY"
+              value={channel.gate.decay}
+              min={0}
+              max={159}
+              step={1}
+              savedValue={savedChannel?.gate.decay}
+              defaultValue={44}
+              displayValue={`${channel.gate.decay}`}
+              color="#f59e0b"
+              size={52}
+              onChange={(val) =>
+                sendCommand({ type: 'set_gate', id: channel.id, param: 'decay', value: val })
+              }
+            />
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

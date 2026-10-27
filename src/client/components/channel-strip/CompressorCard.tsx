@@ -46,7 +46,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
       </div>
 
       {controlMode === 'knobs' ? (
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 py-2">
+        <div className="grid grid-cols-3 gap-3 py-2">
           <RotaryKnob
             label="THRESH"
             value={channel.comp.threshold}
@@ -57,7 +57,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             defaultValue={-200}
             displayValue={`${(channel.comp.threshold / 10).toFixed(1)}dB`}
             color="#22d3ee"
-            size={50}
+            size={52}
             onChange={(val) =>
               sendCommand({
                 type: 'set_comp',
@@ -78,7 +78,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             defaultValue={5}
             displayValue={compRatioLabel}
             color="#22d3ee"
-            size={50}
+            size={52}
             onChange={(val) =>
               sendCommand({
                 type: 'set_comp',
@@ -90,22 +90,22 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             }
           />
           <RotaryKnob
-            label="MAKEUP"
-            value={channel.comp.gain}
+            label="KNEE"
+            value={channel.comp.knee}
             min={0}
-            max={180}
-            step={5}
-            savedValue={savedChannel?.comp.gain}
-            defaultValue={0}
-            displayValue={`+${(channel.comp.gain / 10).toFixed(1)}dB`}
-            color="#10b981"
-            size={50}
+            max={5}
+            step={1}
+            savedValue={savedChannel?.comp.knee}
+            defaultValue={2}
+            displayValue={channel.comp.knee === 0 ? 'HARD' : `S${channel.comp.knee}`}
+            color="#22d3ee"
+            size={52}
             onChange={(val) =>
               sendCommand({
                 type: 'set_comp',
                 target: 'ch',
                 id: channel.id,
-                param: 'gain',
+                param: 'knee',
                 value: val,
               })
             }
@@ -120,7 +120,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             defaultValue={30}
             displayValue={`${channel.comp.attack}`}
             color="#22d3ee"
-            size={50}
+            size={52}
             onChange={(val) =>
               sendCommand({
                 type: 'set_comp',
@@ -141,7 +141,7 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             defaultValue={40}
             displayValue={`${channel.comp.release}`}
             color="#22d3ee"
-            size={50}
+            size={52}
             onChange={(val) =>
               sendCommand({
                 type: 'set_comp',
@@ -153,22 +153,22 @@ export const CompressorCard: React.FC<CompressorCardProps> = ({
             }
           />
           <RotaryKnob
-            label="KNEE"
-            value={channel.comp.knee}
+            label="MAKEUP"
+            value={channel.comp.gain}
             min={0}
-            max={5}
-            step={1}
-            savedValue={savedChannel?.comp.knee}
-            defaultValue={2}
-            displayValue={channel.comp.knee === 0 ? 'HARD' : `S${channel.comp.knee}`}
-            color="#22d3ee"
-            size={50}
+            max={180}
+            step={5}
+            savedValue={savedChannel?.comp.gain}
+            defaultValue={0}
+            displayValue={`+${(channel.comp.gain / 10).toFixed(1)}dB`}
+            color="#10b981"
+            size={52}
             onChange={(val) =>
               sendCommand({
                 type: 'set_comp',
                 target: 'ch',
                 id: channel.id,
-                param: 'knee',
+                param: 'gain',
                 value: val,
               })
             }

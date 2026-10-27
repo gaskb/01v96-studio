@@ -43,7 +43,7 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 items-center justify-items-center py-1 flex-1">
+      <div className="grid grid-cols-3 gap-1.5 items-center justify-items-center py-1 flex-1">
         <RotaryKnob
           label="THRESH"
           value={ch.comp.threshold}
@@ -54,7 +54,7 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={-200}
           displayValue={`${(ch.comp.threshold / 10).toFixed(0)}dB`}
           color="#22d3ee"
-          size={32}
+          size={34}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'threshold', value: val })
           }
@@ -69,9 +69,24 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={5}
           displayValue={compRatioLabel}
           color="#22d3ee"
-          size={32}
+          size={34}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'ratio', value: val })
+          }
+        />
+        <RotaryKnob
+          label="KNEE"
+          value={ch.comp.knee}
+          min={0}
+          max={5}
+          step={1}
+          savedValue={savedCh?.comp.knee}
+          defaultValue={2}
+          displayValue={ch.comp.knee === 0 ? 'HARD' : `S${ch.comp.knee}`}
+          color="#22d3ee"
+          size={34}
+          onChange={(val) =>
+            sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'knee', value: val })
           }
         />
         <RotaryKnob
@@ -84,7 +99,7 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={30}
           displayValue={`${ch.comp.attack}`}
           color="#22d3ee"
-          size={32}
+          size={34}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'attack', value: val })
           }
@@ -99,7 +114,7 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={40}
           displayValue={`${ch.comp.release}`}
           color="#22d3ee"
-          size={32}
+          size={34}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'release', value: val })
           }
@@ -114,24 +129,9 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={0}
           displayValue={`+${(ch.comp.gain / 10).toFixed(0)}`}
           color="#10b981"
-          size={32}
+          size={34}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'gain', value: val })
-          }
-        />
-        <RotaryKnob
-          label="KNEE"
-          value={ch.comp.knee}
-          min={0}
-          max={5}
-          step={1}
-          savedValue={savedCh?.comp.knee}
-          defaultValue={2}
-          displayValue={ch.comp.knee === 0 ? 'HARD' : `S${ch.comp.knee}`}
-          color="#22d3ee"
-          size={32}
-          onChange={(val) =>
-            sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'knee', value: val })
           }
         />
       </div>
@@ -168,82 +168,92 @@ export const WidgetGate: React.FC<WidgetCommonProps> = ({
         </button>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1 items-center justify-items-center py-1 flex-1">
-        <RotaryKnob
-          label="THRESH"
-          value={ch.gate.threshold}
-          min={-540}
-          max={0}
-          step={5}
-          savedValue={savedCh?.gate.threshold}
-          defaultValue={-260}
-          displayValue={`${(ch.gate.threshold / 10).toFixed(0)}dB`}
-          color="#f59e0b"
-          size={32}
-          onChange={(val) =>
-            sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
-          }
-        />
-        <RotaryKnob
-          label="RANGE"
-          value={ch.gate.range}
-          min={-700}
-          max={0}
-          step={5}
-          savedValue={savedCh?.gate.range}
-          defaultValue={-560}
-          displayValue={`${(ch.gate.range / 10).toFixed(0)}`}
-          color="#f59e0b"
-          size={32}
-          onChange={(val) =>
-            sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
-          }
-        />
-        <RotaryKnob
-          label="ATTACK"
-          value={ch.gate.attack}
-          min={0}
-          max={120}
-          step={1}
-          savedValue={savedCh?.gate.attack}
-          defaultValue={10}
-          displayValue={`${ch.gate.attack}`}
-          color="#f59e0b"
-          size={32}
-          onChange={(val) =>
-            sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
-          }
-        />
-        <RotaryKnob
-          label="HOLD"
-          value={ch.gate.hold}
-          min={0}
-          max={215}
-          step={1}
-          savedValue={savedCh?.gate.hold}
-          defaultValue={10}
-          displayValue={`${ch.gate.hold}`}
-          color="#f59e0b"
-          size={32}
-          onChange={(val) =>
-            sendCommand({ type: 'set_gate', id: ch.id, param: 'hold', value: val })
-          }
-        />
-        <RotaryKnob
-          label="DECAY"
-          value={ch.gate.decay}
-          min={0}
-          max={159}
-          step={1}
-          savedValue={savedCh?.gate.decay}
-          defaultValue={44}
-          displayValue={`${ch.gate.decay}`}
-          color="#f59e0b"
-          size={32}
-          onChange={(val) =>
-            sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
-          }
-        />
+      <div className="grid grid-cols-6 gap-y-1.5 gap-x-1 items-center justify-items-center py-1 flex-1">
+        <div className="col-span-3 flex justify-center w-full">
+          <RotaryKnob
+            label="THRESH"
+            value={ch.gate.threshold}
+            min={-540}
+            max={0}
+            step={5}
+            savedValue={savedCh?.gate.threshold}
+            defaultValue={-260}
+            displayValue={`${(ch.gate.threshold / 10).toFixed(0)}dB`}
+            color="#f59e0b"
+            size={34}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
+            }
+          />
+        </div>
+        <div className="col-span-3 flex justify-center w-full">
+          <RotaryKnob
+            label="RANGE"
+            value={ch.gate.range}
+            min={-700}
+            max={0}
+            step={5}
+            savedValue={savedCh?.gate.range}
+            defaultValue={-560}
+            displayValue={`${(ch.gate.range / 10).toFixed(0)}`}
+            color="#f59e0b"
+            size={34}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
+            }
+          />
+        </div>
+        <div className="col-span-2 flex justify-center w-full">
+          <RotaryKnob
+            label="ATTACK"
+            value={ch.gate.attack}
+            min={0}
+            max={120}
+            step={1}
+            savedValue={savedCh?.gate.attack}
+            defaultValue={10}
+            displayValue={`${ch.gate.attack}`}
+            color="#f59e0b"
+            size={34}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
+            }
+          />
+        </div>
+        <div className="col-span-2 flex justify-center w-full">
+          <RotaryKnob
+            label="HOLD"
+            value={ch.gate.hold}
+            min={0}
+            max={215}
+            step={1}
+            savedValue={savedCh?.gate.hold}
+            defaultValue={10}
+            displayValue={`${ch.gate.hold}`}
+            color="#f59e0b"
+            size={34}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: ch.id, param: 'hold', value: val })
+            }
+          />
+        </div>
+        <div className="col-span-2 flex justify-center w-full">
+          <RotaryKnob
+            label="DECAY"
+            value={ch.gate.decay}
+            min={0}
+            max={159}
+            step={1}
+            savedValue={savedCh?.gate.decay}
+            defaultValue={44}
+            displayValue={`${ch.gate.decay}`}
+            color="#f59e0b"
+            size={34}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
+            }
+          />
+        </div>
       </div>
     </div>
   );
