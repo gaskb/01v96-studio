@@ -61,6 +61,12 @@ export interface CommandDispatcherContext {
   stopDemoWave: () => Promise<void>;
 }
 
+function clampInt(val: unknown, min: number, max: number, defaultVal: number = min): number {
+  const n = typeof val === 'number' ? val : Number(val);
+  if (!Number.isFinite(n)) return defaultVal;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
 export async function dispatchClientCommand(
   cmd: ClientCommand,
   ctx: CommandDispatcherContext
@@ -68,7 +74,7 @@ export async function dispatchClientCommand(
   switch (cmd.type) {
     case 'set_fader': {
       const ch = cmd.id - 1;
-      const val = Math.max(0, Math.min(1023, Math.round(cmd.value)));
+      const val = clampInt(cmd.value, 0, 1023, 0);
       if (cmd.target === 'ch' && ctx.state.channels[ch]) {
         ctx.dirtyParams.add(`ch${cmd.id}:fader`);
         ctx.state.channels[ch].fader = val;
@@ -143,7 +149,7 @@ export async function dispatchClientCommand(
 
     case 'set_pan': {
       const ch = cmd.id - 1;
-      const val = Math.max(-63, Math.min(63, Math.round(cmd.value)));
+      const val = clampInt(cmd.value, -63, 63, 0);
       if (cmd.target === 'ch' && ctx.state.channels[ch]) {
         ctx.dirtyParams.add(`ch${cmd.id}:pan`);
         ctx.state.channels[ch].pan = val;
@@ -187,7 +193,7 @@ export async function dispatchClientCommand(
 
     case 'set_att': {
       const ch = cmd.id - 1;
-      const val = Math.max(-960, Math.min(180, Math.round(cmd.value)));
+      const val = clampInt(cmd.value, -960, 180, 0);
       if (ctx.state.channels[ch]) {
         ctx.dirtyParams.add(`ch${cmd.id}:att`);
         ctx.state.channels[ch].att = val;
@@ -354,7 +360,7 @@ export async function dispatchClientCommand(
         numVal = cmd.value ? 1 : 0;
       } else if (cmd.param === 'level') {
         sub = 2;
-        numVal = Math.max(0, Math.min(1023, Math.round(Number(cmd.value))));
+        numVal = clampInt(cmd.value, 0, 1023, 0);
         ctx.dirtyParams.add(`ch${cmd.chId}:aux:${cmd.auxId}:level`);
         chObj.auxSends[auxIdx].level = numVal;
       }
@@ -372,7 +378,7 @@ export async function dispatchClientCommand(
       if (!chObj) break;
       ctx.dirtyParams.add(`ch${cmd.id}:delayTime`);
       chObj.delayOn = cmd.on;
-      chObj.delayTime = Math.max(0, Math.min(1000, Math.round(cmd.time)));
+      chObj.delayTime = clampInt(cmd.time, 0, 1000, 0);
       await ctx.transport.sendSysEx(
         buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 0, ch, cmd.on ? 1 : 0)
       );
@@ -387,7 +393,7 @@ export async function dispatchClientCommand(
     }
 
     case 'select_channel': {
-      const id = Math.max(1, Math.min(32, cmd.id));
+      const id = clampInt(cmd.id, 1, 32, 1);
       ctx.state.selectedChannel = id;
       await ctx.transport.sendSysEx(buildParamChange(MODEL_01V96, 4, 9, 24, 0, id - 1));
       ctx.broadcastPatch({ selectedChannel: id });
@@ -406,7 +412,7 @@ export async function dispatchClientCommand(
     }
 
     case 'recall_scene': {
-      const pgm = Math.max(0, Math.min(99, cmd.sceneNumber));
+      const pgm = clampInt(cmd.sceneNumber, 0, 99, 0);
       ctx.state.sceneNumber = pgm;
       await ctx.transport.sendSysEx(buildSceneRecallSysEx(pgm));
       await ctx.transport.sendSysEx([0xc0, pgm]);
@@ -417,7 +423,7 @@ export async function dispatchClientCommand(
     }
 
     case 'store_scene': {
-      const pgm = Math.max(0, Math.min(99, cmd.sceneNumber));
+      const pgm = clampInt(cmd.sceneNumber, 0, 99, 0);
       if (cmd.title) {
         const clean = cmd.title.slice(0, 16).padEnd(16, ' ');
         ctx.state.sceneTitle = cmd.title.slice(0, 16).trim();
