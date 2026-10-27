@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ClientCommand, ControlMode, InputChannelState } from '../../shared/types';
 import { InteractiveEQ } from './InteractiveEQ';
+import { TripleVuMeterBridge } from './AnalogVuMeter';
 import { ChannelStripAuxTab } from './channel-strip/ChannelStripAuxTab';
 import { ChannelStripDynTab } from './channel-strip/ChannelStripDynTab';
 import { ChannelStripHeader, ChannelStripTabId } from './channel-strip/ChannelStripHeader';
@@ -63,6 +64,18 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
           controlMode={controlMode}
           sendCommand={sendCommand}
         />
+      )}
+
+      {/* TAB: Dedicated Vintage Triple Analog Needle VU-Meters (IN, GR, OUT) */}
+      {activeTab === 'vu' && (
+        <div className="flex flex-col gap-3 py-2 items-center justify-center">
+          <TripleVuMeterBridge
+            meterIn={channel.meterIn}
+            meterOut={channel.meterOut}
+            grDb={channel.grDb}
+            channelName={channel.name ? `CH ${channel.id}: ${channel.name}` : `CH ${channel.id}`}
+          />
+        </div>
       )}
 
       {/* TAB 3: AUX Sends 1..8 + Live IN/OUT Level */}

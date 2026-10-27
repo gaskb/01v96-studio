@@ -4,7 +4,7 @@ import { ClientCommand, ControlMode, InputChannelState } from '../../../shared/t
 import { resolveKnobReset } from '../RotaryKnob';
 import { handleSliderWheel } from './sliderWheelHelper';
 
-export type ChannelStripTabId = 'eq' | 'dyn' | 'aux' | 'routing';
+export type ChannelStripTabId = 'eq' | 'dyn' | 'vu' | 'aux' | 'routing';
 
 interface ChannelStripHeaderProps {
   channel: InputChannelState;
@@ -222,6 +222,7 @@ export const ChannelStripHeader: React.FC<ChannelStripHeaderProps> = ({
           {[
             { id: 'eq', label: '📊 4-BAND EQ' },
             { id: 'dyn', label: '🎛️ GATE & COMP' },
+            { id: 'vu', label: '🕰️ VU METERS' },
             { id: 'aux', label: '🎚️ AUX 1-8' },
             { id: 'routing', label: '🔀 ROUTING & DELAY' },
           ].map((t) => (
