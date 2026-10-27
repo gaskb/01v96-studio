@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { ClientCommand, ControlMode, InputChannelState, MixerState } from '../../shared/types';
 import {
+  insertWidgetIntoLayout,
   loadStoredLayout,
   normalizeLayout,
   resetStoredLayout,
   saveStoredLayout,
 } from './channel-layout/defaultPresets';
+import { AddWidgetDropdown } from './channel-layout/AddWidgetDropdown';
 import { LayoutToolbar } from './channel-layout/LayoutToolbar';
-import { ChannelLayoutConfig, WidgetLayoutItem } from './channel-layout/layoutTypes';
+import { ChannelLayoutConfig, WidgetId, WidgetLayoutItem } from './channel-layout/layoutTypes';
 import { ModularWidgetCard } from './channel-layout/ModularWidgetCard';
 import { renderWidgetContent } from './channel-layout/WidgetRenderer';
 import { FaderStrip } from './FaderStrip';
@@ -272,6 +274,12 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
     setLayout(reset);
   };
 
+  const handleInsertWidget = (widgetId: WidgetId) => {
+    const { nextLayout } = insertWidgetIntoLayout(layout, widgetId);
+    setLayout(nextLayout);
+    saveStoredLayout(nextLayout);
+  };
+
   const handleApplyCustomJson = (jsonStr: string): boolean => {
     try {
       const parsed = JSON.parse(jsonStr);
@@ -436,8 +444,11 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
           ))}
         </div>
 
-        {/* Action Controls & Layout Customizer Button */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Action Controls, Add Module & Layout Customizer Button */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Menù a tendina con pulsante "+" per inserire moduli (es. VU-Meter, EQ, Dinamiche) */}
+          <AddWidgetDropdown onAddWidget={handleInsertWidget} />
+
           {/* Prototyping Edit Mode Toggle */}
           <button
             onClick={handleToggleEditMode}
@@ -511,6 +522,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
         onResetDefault={handleResetDefault}
         onApplyCustomJson={handleApplyCustomJson}
         onChangeGridDimensions={handleChangeGridDimensions}
+        onAddWidget={handleInsertWidget}
       />
 
       {/* Main Single or Side-by-Side Dual Channel Deck */}

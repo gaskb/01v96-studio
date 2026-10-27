@@ -247,3 +247,150 @@ export function resetStoredLayout(): ChannelLayoutConfig {
   }
   return structuredClone(PRESET_USER_MOCKUP);
 }
+
+export function findNextAvailablePosition(
+  items: WidgetLayoutItem[],
+  gridCols: number,
+  gridRows: number,
+  colSpan: number,
+  rowSpan: number
+): { colStart: number; rowStart: number } {
+  // Build grid occupancy matrix
+  const occupied: boolean[][] = Array.from({ length: gridRows }, () =>
+    Array(gridCols).fill(false)
+  );
+
+  for (const it of items) {
+    if (!it.visible) continue;
+    const cs = (it.colStart || 1) - 1;
+    const rs = (it.rowStart || 1) - 1;
+    const ce = Math.min(gridCols, cs + it.colSpan);
+    const re = Math.min(gridRows, rs + (it.rowSpan || 1));
+    for (let r = rs; r < re; r++) {
+      for (let c = cs; c < ce; c++) {
+        if (occupied[r]) occupied[r][c] = true;
+      }
+    }
+  }
+
+  // Scan for first rectangular slot that fits
+  for (let r = 0; r <= gridRows - rowSpan; r++) {
+    for (let c = 0; c <= gridCols - colSpan; c++) {
+      let fits = true;
+      for (let dr = 0; dr < rowSpan; dr++) {
+        for (let dc = 0; dc < colSpan; dc++) {
+          if (occupied[r + dr][c + dc]) {
+            fits = false;
+            break;
+          }
+        }
+        if (!fits) break;
+      }
+      if (fits) {
+        return { colStart: c + 1, rowStart: r + 1 };
+      }
+    }
+  }
+
+  // Fallback: place at col 1, row 1
+  return { colStart: 1, rowStart: 1 };
+}
+
+export function insertWidgetIntoLayout(
+  layout: ChannelLayoutConfig,
+  widgetId: WidgetId
+): { nextLayout: ChannelLayoutConfig; alreadyExists: boolean } {
+  const gridCols = layout.gridCols || 24;
+  const gridRows = layout.gridRows || 4;
+
+  const existingIdx = layout.items.findIndex((i) => i.id === widgetId);
+  if (existingIdx !== -1 && layout.items[existingIdx].visible) {
+    return { nextLayout: layout, alreadyExists: true };
+  }
+
+  const meta = WIDGET_META_MAP[widgetId];
+  let colSpan = 4;
+  let rowSpan = meta?.defaultHeight || 2;
+
+  if (widgetId === 'meter_vu') {
+    colSpan = 8;
+    rowSpan = 2;
+  } else if (widgetId === 'meter_vertical' || widgetId === 'meter_preamp') {
+    colSpan = 1;
+    rowSpan = 4;
+  } else if (widgetId === 'eq_graph') {
+    colSpan = 7;
+    rowSpan = 2;
+  } else if (widgetId === 'compressor') {
+    colSpan = 6;
+    rowSpan = 2;
+  } else if (widgetId === 'gate') {
+    colSpan = 4;
+    rowSpan = 2;
+  } else if (widgetId === 'preamp') {
+    colSpan = 3;
+    rowSpan = 2;
+  } else if (widgetId === 'routing') {
+    colSpan = 4;
+    rowSpan = 4;
+  } else if (widgetId === 'eq_bands') {
+    colSpan = 4;
+    rowSpan = 4;
+  } else if (widgetId === 'aux_sends') {
+    colSpan = 5;
+    rowSpan = 4;
+  } else if (widgetId.startsWith('aux_')) {
+    colSpan = 5;
+    rowSpan = 1;
+  } else if (widgetId.startsWith('eq_')) {
+    colSpan = 3;
+    rowSpan = 1;
+  }
+
+  colSpan = Math.max(1, Math.min(gridCols, colSpan));
+  rowSpan = Math.max(1, Math.min(gridRows, rowSpan));
+
+  const { colStart, rowStart } = findNextAvailablePosition(
+    layout.items,
+    gridCols,
+    gridRows,
+    colSpan,
+    rowSpan
+  );
+
+  let nextItems: WidgetLayoutItem[];
+  if (existingIdx !== -1) {
+    nextItems = layout.items.map((it, idx) =>
+      idx === existingIdx
+        ? {
+            ...it,
+            visible: true,
+            colStart,
+            rowStart,
+            colSpan,
+            rowSpan,
+          }
+        : it
+    );
+  } else {
+    nextItems = [
+      ...layout.items,
+      {
+        id: widgetId,
+        colStart,
+        rowStart,
+        colSpan,
+        rowSpan,
+        visible: true,
+      },
+    ];
+  }
+
+  const nextLayout: ChannelLayoutConfig = {
+    ...layout,
+    presetName: 'Personalizzato',
+    items: nextItems,
+  };
+
+  return { nextLayout, alreadyExists: false };
+}

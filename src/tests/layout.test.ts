@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_CORE_WIDGET_IDS,
   BUILTIN_PRESETS,
+  findNextAvailablePosition,
+  insertWidgetIntoLayout,
   normalizeLayout,
   PRESET_EQ_FOCUS,
   PRESET_USER_MOCKUP,
@@ -251,5 +253,68 @@ describe('Channel Modular Layout System (Prototyping Engine - 24 Columns & Split
     expect(meters).toBeDefined();
     expect(meters?.rowSpan).toBeLessThanOrEqual(2);
     expect(meters!.rowStart! + meters!.rowSpan! - 1).toBeLessThanOrEqual(2);
+  });
+
+  describe('insertWidgetIntoLayout & findNextAvailablePosition', () => {
+    it('finds free slot when grid is partially occupied', () => {
+      const items = [
+        { id: 'meter_vertical' as WidgetId, colStart: 1, rowStart: 1, colSpan: 2, rowSpan: 4, visible: true },
+      ];
+      // Looking for a 4-col wide, 2-row high block
+      const pos = findNextAvailablePosition(items, 24, 4, 4, 2);
+      expect(pos.colStart).toBe(3);
+      expect(pos.rowStart).toBe(1);
+    });
+
+    it('inserts a new widget (meter_vu) into layout with correct position and dimensions', () => {
+      const layout: ChannelLayoutConfig = {
+        presetName: 'Empty Rack',
+        gridCols: 24,
+        gridRows: 4,
+        items: [
+          { id: 'meter_vertical', colStart: 1, rowStart: 1, colSpan: 2, rowSpan: 4, visible: true },
+        ],
+      };
+
+      const result = insertWidgetIntoLayout(layout, 'meter_vu');
+      expect(result.alreadyExists).toBe(false);
+      expect(result.nextLayout.items.some((i) => i.id === 'meter_vu')).toBe(true);
+      const inserted = result.nextLayout.items.find((i) => i.id === 'meter_vu');
+      expect(inserted?.visible).toBe(true);
+      expect(inserted?.colStart).toBe(3);
+      expect(inserted?.colSpan).toBe(8);
+      expect(inserted?.rowSpan).toBe(2);
+    });
+
+    it('unhides an existing widget if it was hidden (visible: false)', () => {
+      const layout: ChannelLayoutConfig = {
+        presetName: 'Test',
+        gridCols: 24,
+        gridRows: 4,
+        items: [
+          { id: 'gate', colStart: 1, rowStart: 1, colSpan: 4, rowSpan: 2, visible: false },
+        ],
+      };
+
+      const result = insertWidgetIntoLayout(layout, 'gate');
+      expect(result.alreadyExists).toBe(false);
+      const unhidden = result.nextLayout.items.find((i) => i.id === 'gate');
+      expect(unhidden?.visible).toBe(true);
+    });
+
+    it('reports alreadyExists: true if the widget is already visible in the layout', () => {
+      const layout: ChannelLayoutConfig = {
+        presetName: 'Test',
+        gridCols: 24,
+        gridRows: 4,
+        items: [
+          { id: 'compressor', colStart: 1, rowStart: 1, colSpan: 6, rowSpan: 2, visible: true },
+        ],
+      };
+
+      const result = insertWidgetIntoLayout(layout, 'compressor');
+      expect(result.alreadyExists).toBe(true);
+      expect(result.nextLayout).toBe(layout);
+    });
   });
 });

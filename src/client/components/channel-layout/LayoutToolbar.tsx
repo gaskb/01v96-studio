@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { AddWidgetDropdown } from './AddWidgetDropdown';
 import { BUILTIN_PRESETS } from './defaultPresets';
-import { ChannelLayoutConfig } from './layoutTypes';
+import { ChannelLayoutConfig, WidgetId } from './layoutTypes';
 
 interface LayoutToolbarProps {
   layout: ChannelLayoutConfig;
@@ -10,6 +11,7 @@ interface LayoutToolbarProps {
   onResetDefault: () => void;
   onApplyCustomJson: (jsonStr: string) => boolean;
   onChangeGridDimensions?: (cols: number, rows: number) => void;
+  onAddWidget?: (widgetId: WidgetId) => void;
 }
 
 export const LayoutToolbar: React.FC<LayoutToolbarProps> = ({
@@ -20,6 +22,7 @@ export const LayoutToolbar: React.FC<LayoutToolbarProps> = ({
   onResetDefault,
   onApplyCustomJson,
   onChangeGridDimensions,
+  onAddWidget,
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [jsonDraft, setJsonDraft] = useState('');
@@ -76,6 +79,9 @@ export const LayoutToolbar: React.FC<LayoutToolbarProps> = ({
 
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Insert Module Dropdown + "+" Button */}
+            {onAddWidget && <AddWidgetDropdown onAddWidget={onAddWidget} />}
+
             {/* Presets Selector */}
             <div className="flex items-center gap-1.5 bg-slate-950/80 border border-amber-900/60 rounded-lg px-2 py-1">
               <span className="text-[10px] font-mono text-amber-400/80">Preset:</span>

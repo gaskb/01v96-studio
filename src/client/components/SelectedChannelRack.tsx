@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { ClientCommand, ControlMode, InputChannelState } from '../../shared/types';
 import {
+  insertWidgetIntoLayout,
   loadStoredLayout,
   normalizeLayout,
   resetStoredLayout,
   saveStoredLayout,
 } from './channel-layout/defaultPresets';
+import { AddWidgetDropdown } from './channel-layout/AddWidgetDropdown';
 import { LayoutToolbar } from './channel-layout/LayoutToolbar';
-import { ChannelLayoutConfig, WidgetLayoutItem } from './channel-layout/layoutTypes';
+import { ChannelLayoutConfig, WidgetId, WidgetLayoutItem } from './channel-layout/layoutTypes';
 import { ModularWidgetCard } from './channel-layout/ModularWidgetCard';
 import { renderWidgetContent } from './channel-layout/WidgetRenderer';
 import { ChannelStripPanel } from './ChannelStripPanel';
@@ -53,6 +55,13 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
   const handleResetDefault = () => {
     const reset = resetStoredLayout();
     setLayout(reset);
+  };
+
+  const handleInsertWidget = (widgetId: WidgetId) => {
+    const { nextLayout } = insertWidgetIntoLayout(layout, widgetId);
+    setLayout(nextLayout);
+    saveStoredLayout(nextLayout);
+    if (isCollapsed) setIsCollapsed(false);
   };
 
   const handleApplyCustomJson = (jsonStr: string): boolean => {
@@ -287,8 +296,11 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
           </button>
         </div>
 
-        {/* Right: Layout Edit Toggle, Knobs/Sliders & Collapse */}
-        <div className="flex items-center gap-2">
+        {/* Right: Add Module Dropdown with "+", Layout Edit Toggle, Knobs/Sliders & Collapse */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Menù a tendina con pulsante "+" per inserire moduli (es. VU-Meter, EQ, Dinamiche) */}
+          <AddWidgetDropdown onAddWidget={handleInsertWidget} />
+
           {/* Prototyping Edit Mode Toggle Button */}
           <button
             onClick={handleToggleEditMode}
@@ -347,6 +359,7 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
         onResetDefault={handleResetDefault}
         onApplyCustomJson={handleApplyCustomJson}
         onChangeGridDimensions={handleChangeGridDimensions}
+        onAddWidget={handleInsertWidget}
       />
 
       {/* MODULAR DRAGGABLE & RESIZABLE GRID RACK (Configurable Cols x Rows) */}
