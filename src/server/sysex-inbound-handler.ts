@@ -56,8 +56,6 @@ export interface InboundContext {
   effectTitleChars: Map<number, string[]>;
   channelNameChars: Map<number, string[]>;
   labelsStorage: SceneLabelsStorage;
-  skipNextMeter: boolean;
-  setSkipNextMeter: (val: boolean) => void;
   broadcastPatch: (patch: Partial<MixerState>) => void;
   broadcastChannelUpdate: (
     target: 'ch' | 'aux' | 'bus' | 'stereo',
@@ -109,10 +107,6 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
   // 3. Live Meter Packet (Model 0x0D, DataType 0x21)
   if (modelId === MODEL_01V96 && dataType === 0x21 && msg.length >= 25) {
     if (element === 0 && msg.length >= 71) {
-      const nextSkip = !ctx.skipNextMeter;
-      ctx.setSkipNextMeter(nextSkip);
-      if (nextSkip) return;
-
       const metersIn: Record<string, number> = {};
       const metersOut: Record<string, number> = {};
       const grs: Record<string, number> = {};

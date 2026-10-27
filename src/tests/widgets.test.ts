@@ -89,8 +89,8 @@ describe('WidgetRenderer (src/client/components/channel-layout/WidgetRenderer.ts
     }
   });
 
-  it('renders valid React elements for additional composite widgets (eq_bands, meter_preamp, aux_sends)', () => {
-    const compositeWidgets: WidgetId[] = ['eq_bands', 'meter_preamp', 'aux_sends'];
+  it('renders valid React elements for additional composite widgets (eq_bands, meter_preamp, aux_sends, meter_vu)', () => {
+    const compositeWidgets: WidgetId[] = ['eq_bands', 'meter_preamp', 'aux_sends', 'meter_vu'];
 
     for (const widgetId of compositeWidgets) {
       const element = renderWidgetContent(

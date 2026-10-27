@@ -1,5 +1,6 @@
 export type WidgetId =
   | 'meter_vertical'
+  | 'meter_vu'
   | 'eq_graph'
   | 'eq_high'
   | 'eq_himid'
@@ -54,6 +55,15 @@ export const WIDGET_META_MAP: Record<WidgetId, WidgetMeta> = {
     color: '#06b6d4',
     description: 'Torre LED verticale di livello Pre/Post DSP e Gain Reduction',
     defaultHeight: 4,
+  },
+  meter_vu: {
+    id: 'meter_vu',
+    name: 'VU-Meter Analogici a Lancetta (IN / GR / OUT)',
+    shortName: 'VU METERS',
+    category: 'metering',
+    color: '#f59e0b',
+    description: '3 VU-meter analogici stile vintage a lancetta per Input, Gain Reduction (zero a destra) e Output',
+    defaultHeight: 2,
   },
   meter_preamp: {
     id: 'meter_preamp',

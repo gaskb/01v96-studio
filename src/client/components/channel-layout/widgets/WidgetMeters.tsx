@@ -1,5 +1,6 @@
 import React from 'react';
 import { InOutMeterBridge } from '../../InOutMeterBridge';
+import { TripleVuMeterBridge } from '../../AnalogVuMeter';
 import { WidgetCommonProps } from './WidgetTypes';
 
 /**
@@ -20,6 +21,22 @@ export const WidgetVerticalMeters: React.FC<WidgetCommonProps> = ({ ch }) => {
           vertical={true}
         />
       </div>
+    </div>
+  );
+};
+
+/**
+ * 2. Vintage Triple Analog Needle VU-Meters (IN, GR with zero on right, OUT)
+ */
+export const WidgetAnalogVuMeters: React.FC<WidgetCommonProps> = ({ ch }) => {
+  return (
+    <div className="h-full w-full flex flex-col justify-center">
+      <TripleVuMeterBridge
+        meterIn={ch.meterIn}
+        meterOut={ch.meterOut}
+        grDb={ch.grDb}
+        channelName={ch.name}
+      />
     </div>
   );
 };

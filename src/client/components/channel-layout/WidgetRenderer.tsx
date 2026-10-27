@@ -16,6 +16,7 @@ import {
   WidgetGate,
   WidgetPreampAttenPan,
   WidgetVerticalMeters,
+  WidgetAnalogVuMeters,
   WidgetVerticalRouting,
 } from './ChannelWidgets.js';
 import { WidgetId } from './layoutTypes.js';
@@ -44,6 +45,15 @@ export const renderWidgetContent = (
     case 'meter_preamp':
       return (
         <WidgetVerticalMeters
+          ch={ch}
+          savedCh={savedCh}
+          controlMode={controlMode}
+          sendCommand={sendCommand}
+        />
+      );
+    case 'meter_vu':
+      return (
+        <WidgetAnalogVuMeters
           ch={ch}
           savedCh={savedCh}
           controlMode={controlMode}

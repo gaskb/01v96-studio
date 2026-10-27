@@ -51,7 +51,6 @@ export class MixerController {
   private sceneTitleChars: string[] = Array(16).fill(' ');
   private effectTitleChars: Map<number, string[]> = new Map();
   private channelNameChars: Map<number, string[]> = new Map();
-  private skipNextMeter = false;
   private labelsStorage: SceneLabelsStorage;
 
   constructor(broadcastCallback: (msg: unknown) => void) {
@@ -119,12 +118,12 @@ export class MixerController {
       this.initialSync();
     }
 
-    // High-frequency meter polling (50ms interval) - throttled if sendQueue is busy
+    // High-frequency meter polling (35ms interval ~ 28 fps) - throttled if sendQueue is busy
     this.meterInterval = setInterval(async () => {
       if (this.transport.isConnected() && this.transport.getQueueLength() < 2) {
         await this.transport.sendSysEx(buildMeterRequest());
       }
-    }, 50);
+    }, 35);
 
     // Auto-reconnect monitoring every 3s
     this.reconnectInterval = setInterval(async () => {
@@ -250,10 +249,6 @@ export class MixerController {
       effectTitleChars: this.effectTitleChars,
       channelNameChars: this.channelNameChars,
       labelsStorage: this.labelsStorage,
-      skipNextMeter: this.skipNextMeter,
-      setSkipNextMeter: (val) => {
-        this.skipNextMeter = val;
-      },
       broadcastPatch: (patch) => this.broadcastPatch(patch),
       broadcastChannelUpdate: (target, id, changes) =>
         this.broadcastChannelUpdate(target, id, changes),

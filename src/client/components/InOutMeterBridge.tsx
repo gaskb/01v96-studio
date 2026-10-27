@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { TripleVuMeterBridge } from './AnalogVuMeter';
 
 interface InOutMeterBridgeProps {
   meterIn: number;  // 0..255
@@ -6,6 +7,8 @@ interface InOutMeterBridgeProps {
   grDb?: number;    // 0..24 dB Gain Reduction
   compact?: boolean;
   vertical?: boolean;
+  channelName?: string;
+  allowStyleToggle?: boolean;
 }
 
 export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
@@ -14,7 +17,25 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
   grDb = 0,
   compact = false,
   vertical = false,
+  channelName,
+  allowStyleToggle = true,
 }) => {
+  const [meterStyle, setMeterStyle] = useState<'led' | 'vu'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem('01v96_meter_style');
+      if (saved === 'vu' || saved === 'led') return saved;
+    }
+    return 'vu';
+  });
+
+  const toggleStyle = () => {
+    const next = meterStyle === 'vu' ? 'led' : 'vu';
+    setMeterStyle(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('01v96_meter_style', next);
+    }
+  };
+
   const inPct = Math.max(0, Math.min(100, (meterIn / 255) * 100));
   const outPct = Math.max(0, Math.min(100, (meterOut / 255) * 100));
   const grPct = Math.max(0, Math.min(100, (grDb / 24) * 100));
@@ -22,12 +43,37 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
   const inDbLabel = meterIn <= 0 ? '-∞' : `${(-60 + (meterIn / 255) * 60).toFixed(0)}dB`;
   const outDbLabel = meterOut <= 0 ? '-∞' : `${(-60 + (meterOut / 255) * 60).toFixed(0)}dB`;
 
+  // If VU meter style is active and not compact/vertical, display Triple Analog VU Meters
+  if (meterStyle === 'vu' && !compact && !vertical) {
+    return (
+      <TripleVuMeterBridge
+        meterIn={meterIn}
+        meterOut={meterOut}
+        grDb={grDb}
+        channelName={channelName}
+        onToggleStyle={allowStyleToggle ? toggleStyle : undefined}
+        currentStyle={meterStyle}
+      />
+    );
+  }
+
   if (vertical) {
     return (
       <div className="flex flex-col items-center justify-between h-full bg-[#070a0f] border border-slate-800/90 rounded-xl p-2 w-full select-none shadow-sm">
-        <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-          METERS
-        </span>
+        <div className="flex items-center justify-between w-full border-b border-slate-800/80 pb-0.5">
+          <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+            METERS
+          </span>
+          {allowStyleToggle && (
+            <button
+              onClick={toggleStyle}
+              title="Passa a VU meter a lancetta"
+              className="text-[8px] font-mono text-amber-400 hover:text-amber-200 cursor-pointer font-bold px-1 rounded bg-amber-950/40 border border-amber-800/50"
+            >
+              VU
+            </button>
+          )}
+        </div>
 
         {/* 3 Vertical Meter Columns: IN, GR, OUT */}
         <div className="flex-1 w-full flex items-center justify-around gap-1 py-1 min-h-[140px]">
@@ -123,10 +169,21 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
     <div className="flex flex-col gap-1.5 bg-[#070a0f] border border-slate-800/90 rounded-xl p-2.5">
       <div className="flex items-center justify-between text-[10px] font-mono">
         <span className="text-slate-400 font-bold">SIGNAL LEVEL (PRE / POST DSP)</span>
-        <div className="flex items-center gap-3">
-          <span className="text-sky-300">IN: {inDbLabel}</span>
-          {grDb > 0 && <span className="text-rose-400 font-bold">GR: -{grDb.toFixed(1)} dB</span>}
-          <span className="text-emerald-300 font-bold">OUT: {outDbLabel}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <span className="text-sky-300">IN: {inDbLabel}</span>
+            {grDb > 0 && <span className="text-rose-400 font-bold">GR: -{grDb.toFixed(1)} dB</span>}
+            <span className="text-emerald-300 font-bold">OUT: {outDbLabel}</span>
+          </div>
+          {allowStyleToggle && (
+            <button
+              onClick={toggleStyle}
+              title="Passa a VU meter a lancetta"
+              className="ml-2 px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-amber-950/40 border border-amber-800/60 text-amber-400 hover:text-amber-200 cursor-pointer"
+            >
+              VU METERS
+            </button>
+          )}
         </div>
       </div>
 
