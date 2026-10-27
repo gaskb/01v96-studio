@@ -5,12 +5,13 @@ import { fileURLToPath } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { API_VERSION, APP_VERSION, ClientCommand, UI_VERSION } from '../shared/types.js';
 import { validateClientCommand } from '../shared/validators.js';
+import { LayoutStorage } from './layout-storage.js';
 import { MixerController } from './mixer-controller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function createServer(port = Number(process.env.PORT) || 8096) {
+export function createServer(port = Number(process.env.PORT) || 8096, customLayoutStoragePath?: string) {
   const app = express();
   app.use(express.json());
 
@@ -29,6 +30,7 @@ export function createServer(port = Number(process.env.PORT) || 8096) {
   };
 
   const mixer = new MixerController(broadcast);
+  const layoutStorage = new LayoutStorage(customLayoutStoragePath);
 
   wss.on('connection', (ws) => {
     clients.add(ws);
@@ -97,6 +99,51 @@ export function createServer(port = Number(process.env.PORT) || 8096) {
     }
   });
 
+  // Modular Layout Storage API (Decoupled from mixer scenes, persists to data/layouts.json)
+  app.get('/api/layouts', (_req, res) => {
+    res.json(layoutStorage.getAll());
+  });
+
+  app.post('/api/layouts', (req, res) => {
+    try {
+      const { activeLayout } = req.body;
+      if (activeLayout) {
+        layoutStorage.setActiveLayout(activeLayout);
+      }
+      res.json({ ok: true, data: layoutStorage.getAll() });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/layouts/preset', (req, res) => {
+    try {
+      const preset = req.body?.preset || req.body;
+      if (!preset || !preset.items || !Array.isArray(preset.items)) {
+        res.status(400).json({ error: 'Invalid preset object' });
+        return;
+      }
+      const updatedPresets = layoutStorage.savePreset(preset);
+      res.json({ ok: true, presets: updatedPresets });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.delete('/api/layouts/preset/:name', (req, res) => {
+    try {
+      const name = req.params.name;
+      if (!name) {
+        res.status(400).json({ error: 'Missing preset name' });
+        return;
+      }
+      const updatedPresets = layoutStorage.deletePreset(name);
+      res.json({ ok: true, presets: updatedPresets });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Serve static frontend in production
   const clientDist = path.resolve(__dirname, '../../dist/client');
   app.use(express.static(clientDist));
@@ -112,6 +159,7 @@ export function createServer(port = Number(process.env.PORT) || 8096) {
     app,
     server,
     mixer,
+    layoutStorage,
     start: () =>
       new Promise<http.Server>((resolve) => {
         mixer.start();

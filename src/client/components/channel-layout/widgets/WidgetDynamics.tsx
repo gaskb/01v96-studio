@@ -43,7 +43,7 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 items-center justify-items-center py-1 flex-1">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 items-center justify-items-center py-1 flex-1">
         <RotaryKnob
           label="THRESH"
           value={ch.comp.threshold}
@@ -54,7 +54,7 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={-200}
           displayValue={`${(ch.comp.threshold / 10).toFixed(0)}dB`}
           color="#22d3ee"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'threshold', value: val })
           }
@@ -69,24 +69,24 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={5}
           displayValue={compRatioLabel}
           color="#22d3ee"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'ratio', value: val })
           }
         />
         <RotaryKnob
-          label="GAIN"
-          value={ch.comp.gain}
+          label="ATTACK"
+          value={ch.comp.attack}
           min={0}
-          max={180}
-          step={5}
-          savedValue={savedCh?.comp.gain}
-          defaultValue={0}
-          displayValue={`+${(ch.comp.gain / 10).toFixed(0)}`}
-          color="#10b981"
-          size={34}
+          max={120}
+          step={1}
+          savedValue={savedCh?.comp.attack}
+          defaultValue={30}
+          displayValue={`${ch.comp.attack}`}
+          color="#22d3ee"
+          size={32}
           onChange={(val) =>
-            sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'gain', value: val })
+            sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'attack', value: val })
           }
         />
         <RotaryKnob
@@ -99,9 +99,39 @@ export const WidgetCompressor: React.FC<WidgetCommonProps> = ({
           defaultValue={40}
           displayValue={`${ch.comp.release}`}
           color="#22d3ee"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'release', value: val })
+          }
+        />
+        <RotaryKnob
+          label="GAIN"
+          value={ch.comp.gain}
+          min={0}
+          max={180}
+          step={5}
+          savedValue={savedCh?.comp.gain}
+          defaultValue={0}
+          displayValue={`+${(ch.comp.gain / 10).toFixed(0)}`}
+          color="#10b981"
+          size={32}
+          onChange={(val) =>
+            sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'gain', value: val })
+          }
+        />
+        <RotaryKnob
+          label="KNEE"
+          value={ch.comp.knee}
+          min={0}
+          max={5}
+          step={1}
+          savedValue={savedCh?.comp.knee}
+          defaultValue={2}
+          displayValue={ch.comp.knee === 0 ? 'HARD' : `S${ch.comp.knee}`}
+          color="#22d3ee"
+          size={32}
+          onChange={(val) =>
+            sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'knee', value: val })
           }
         />
       </div>
@@ -138,7 +168,7 @@ export const WidgetGate: React.FC<WidgetCommonProps> = ({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 items-center justify-items-center py-1 flex-1">
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1 items-center justify-items-center py-1 flex-1">
         <RotaryKnob
           label="THRESH"
           value={ch.gate.threshold}
@@ -149,7 +179,7 @@ export const WidgetGate: React.FC<WidgetCommonProps> = ({
           defaultValue={-260}
           displayValue={`${(ch.gate.threshold / 10).toFixed(0)}dB`}
           color="#f59e0b"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
           }
@@ -164,7 +194,7 @@ export const WidgetGate: React.FC<WidgetCommonProps> = ({
           defaultValue={-560}
           displayValue={`${(ch.gate.range / 10).toFixed(0)}`}
           color="#f59e0b"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
           }
@@ -179,9 +209,24 @@ export const WidgetGate: React.FC<WidgetCommonProps> = ({
           defaultValue={10}
           displayValue={`${ch.gate.attack}`}
           color="#f59e0b"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
+          }
+        />
+        <RotaryKnob
+          label="HOLD"
+          value={ch.gate.hold}
+          min={0}
+          max={215}
+          step={1}
+          savedValue={savedCh?.gate.hold}
+          defaultValue={10}
+          displayValue={`${ch.gate.hold}`}
+          color="#f59e0b"
+          size={32}
+          onChange={(val) =>
+            sendCommand({ type: 'set_gate', id: ch.id, param: 'hold', value: val })
           }
         />
         <RotaryKnob
@@ -194,7 +239,7 @@ export const WidgetGate: React.FC<WidgetCommonProps> = ({
           defaultValue={44}
           displayValue={`${ch.gate.decay}`}
           color="#f59e0b"
-          size={34}
+          size={32}
           onChange={(val) =>
             sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
           }
@@ -286,7 +331,7 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5 items-center justify-items-center py-0.5">
+        <div className="grid grid-cols-3 gap-1 items-center justify-items-center py-0.5">
           <RotaryKnob
             label="THRESH"
             value={ch.comp.threshold}
@@ -297,7 +342,7 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={-200}
             displayValue={`${(ch.comp.threshold / 10).toFixed(0)}dB`}
             color="#22d3ee"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'threshold', value: val })
             }
@@ -312,24 +357,24 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={5}
             displayValue={compRatioLabel}
             color="#22d3ee"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'ratio', value: val })
             }
           />
           <RotaryKnob
-            label="GAIN"
-            value={ch.comp.gain}
+            label="ATTACK"
+            value={ch.comp.attack}
             min={0}
-            max={180}
-            step={5}
-            savedValue={savedCh?.comp.gain}
-            defaultValue={0}
-            displayValue={`+${(ch.comp.gain / 10).toFixed(0)}`}
-            color="#10b981"
-            size={34}
+            max={120}
+            step={1}
+            savedValue={savedCh?.comp.attack}
+            defaultValue={30}
+            displayValue={`${ch.comp.attack}`}
+            color="#22d3ee"
+            size={30}
             onChange={(val) =>
-              sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'gain', value: val })
+              sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'attack', value: val })
             }
           />
           <RotaryKnob
@@ -342,9 +387,39 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={40}
             displayValue={`${ch.comp.release}`}
             color="#22d3ee"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'release', value: val })
+            }
+          />
+          <RotaryKnob
+            label="GAIN"
+            value={ch.comp.gain}
+            min={0}
+            max={180}
+            step={5}
+            savedValue={savedCh?.comp.gain}
+            defaultValue={0}
+            displayValue={`+${(ch.comp.gain / 10).toFixed(0)}`}
+            color="#10b981"
+            size={30}
+            onChange={(val) =>
+              sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'gain', value: val })
+            }
+          />
+          <RotaryKnob
+            label="KNEE"
+            value={ch.comp.knee}
+            min={0}
+            max={5}
+            step={1}
+            savedValue={savedCh?.comp.knee}
+            defaultValue={2}
+            displayValue={ch.comp.knee === 0 ? 'HARD' : `S${ch.comp.knee}`}
+            color="#22d3ee"
+            size={30}
+            onChange={(val) =>
+              sendCommand({ type: 'set_comp', target: 'ch', id: ch.id, param: 'knee', value: val })
             }
           />
         </div>
@@ -371,7 +446,7 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-1.5 items-center justify-items-center py-0.5">
+        <div className="grid grid-cols-3 gap-1 items-center justify-items-center py-0.5">
           <RotaryKnob
             label="THRESH"
             value={ch.gate.threshold}
@@ -382,7 +457,7 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={-260}
             displayValue={`${(ch.gate.threshold / 10).toFixed(0)}dB`}
             color="#f59e0b"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_gate', id: ch.id, param: 'threshold', value: val })
             }
@@ -397,7 +472,7 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={-560}
             displayValue={`${(ch.gate.range / 10).toFixed(0)}`}
             color="#f59e0b"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_gate', id: ch.id, param: 'range', value: val })
             }
@@ -412,9 +487,24 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={10}
             displayValue={`${ch.gate.attack}`}
             color="#f59e0b"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_gate', id: ch.id, param: 'attack', value: val })
+            }
+          />
+          <RotaryKnob
+            label="HOLD"
+            value={ch.gate.hold}
+            min={0}
+            max={215}
+            step={1}
+            savedValue={savedCh?.gate.hold}
+            defaultValue={10}
+            displayValue={`${ch.gate.hold}`}
+            color="#f59e0b"
+            size={30}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: ch.id, param: 'hold', value: val })
             }
           />
           <RotaryKnob
@@ -427,7 +517,7 @@ export const WidgetPreampAndDynamics: React.FC<WidgetCommonProps> = ({
             defaultValue={44}
             displayValue={`${ch.gate.decay}`}
             color="#f59e0b"
-            size={34}
+            size={30}
             onChange={(val) =>
               sendCommand({ type: 'set_gate', id: ch.id, param: 'decay', value: val })
             }

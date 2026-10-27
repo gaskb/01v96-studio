@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.5.1';
-export const UI_VERSION = '0.5.1';
-export const API_VERSION = '0.5.0';
+export const APP_VERSION = '0.5.2';
+export const UI_VERSION = '0.5.2';
+export const API_VERSION = '0.5.1';
 
 export type ControlMode = 'knobs' | 'sliders';
 
@@ -180,3 +180,25 @@ export type ClientCommand =
   | { type: 'sync_channel_strip'; id: number }
   | { type: 'sync_all' }
   | { type: 'trigger_demo_wave'; mode?: 'sine' | 'bounce' | 'v-shape' | 'stop' };
+
+export interface WidgetLayoutItem {
+  id: string;
+  colStart?: number;
+  rowStart?: number;
+  colSpan: number;
+  rowSpan?: number;
+  visible: boolean;
+  minHeight?: number;
+}
+
+export interface ChannelLayoutConfig {
+  presetName?: string;
+  gridCols?: number;
+  gridRows?: number;
+  items: WidgetLayoutItem[];
+}
+
+export interface LayoutStorageData {
+  activeLayout?: ChannelLayoutConfig;
+  presets: ChannelLayoutConfig[];
+}

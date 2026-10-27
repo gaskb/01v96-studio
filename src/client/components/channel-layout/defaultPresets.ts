@@ -1,6 +1,97 @@
 import { ChannelLayoutConfig, WIDGET_META_MAP, WidgetId, WidgetLayoutItem } from './layoutTypes';
 
 export const STORAGE_KEY_LAYOUT = '01v96_channel_layout_v5';
+export const STORAGE_KEY_USER_PRESETS = '01v96_user_presets_v1';
+
+export function loadStoredUserPresets(): ChannelLayoutConfig[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_USER_PRESETS);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map((p) => normalizeLayout(p)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredUserPreset(preset: ChannelLayoutConfig): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const current = loadStoredUserPresets();
+    const name = (preset.presetName || 'Personalizzato').trim();
+    const clean: ChannelLayoutConfig = { ...preset, presetName: name };
+    const idx = current.findIndex((p) => (p.presetName || '').toLowerCase() === name.toLowerCase());
+    if (idx !== -1) {
+      current[idx] = clean;
+    } else {
+      current.push(clean);
+    }
+    window.localStorage.setItem(STORAGE_KEY_USER_PRESETS, JSON.stringify(current));
+  } catch {
+    // Ignore
+  }
+}
+
+export async function fetchServerLayouts(): Promise<{
+  activeLayout?: ChannelLayoutConfig;
+  presets: ChannelLayoutConfig[];
+}> {
+  try {
+    const res = await fetch('/api/layouts');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return {
+      activeLayout: data.activeLayout ? normalizeLayout(data.activeLayout) : undefined,
+      presets: Array.isArray(data.presets) ? data.presets.map((p: unknown) => normalizeLayout(p)) : [],
+    };
+  } catch {
+    return { presets: loadStoredUserPresets() };
+  }
+}
+
+export async function saveServerPreset(preset: ChannelLayoutConfig): Promise<ChannelLayoutConfig[]> {
+  saveStoredUserPreset(preset);
+  try {
+    const res = await fetch('/api/layouts/preset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preset }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.presets)
+      ? data.presets.map((p: unknown) => normalizeLayout(p))
+      : loadStoredUserPresets();
+  } catch {
+    return loadStoredUserPresets();
+  }
+}
+
+export async function deleteServerPreset(name: string): Promise<ChannelLayoutConfig[]> {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const current = loadStoredUserPresets().filter(
+        (p) => (p.presetName || '').toLowerCase() !== name.toLowerCase()
+      );
+      window.localStorage.setItem(STORAGE_KEY_USER_PRESETS, JSON.stringify(current));
+    } catch {
+      // Ignore
+    }
+  }
+  try {
+    const res = await fetch(`/api/layouts/preset/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.presets)
+      ? data.presets.map((p: unknown) => normalizeLayout(p))
+      : loadStoredUserPresets();
+  } catch {
+    return loadStoredUserPresets();
+  }
+}
 
 export const ALL_CORE_WIDGET_IDS: WidgetId[] = [
   'meter_vertical',
@@ -234,6 +325,19 @@ export function saveStoredLayout(layout: ChannelLayoutConfig): void {
     window.localStorage.setItem(STORAGE_KEY_LAYOUT, JSON.stringify(layout));
   } catch {
     // Ignore quota or disabled storage
+  }
+
+  // Persist to server data/layouts.json (general layout file, not tied to mixer scenes)
+  try {
+    fetch('/api/layouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activeLayout: layout }),
+    }).catch(() => {
+      // Non-blocking background sync
+    });
+  } catch {
+    // Ignore
   }
 }
 

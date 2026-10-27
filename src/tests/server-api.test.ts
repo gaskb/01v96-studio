@@ -115,4 +115,54 @@ describe('Server API & WebSocket Error Paths (P2)', () => {
     ws.close();
     await new Promise((r) => setTimeout(r, 60));
   });
+
+  it('manages layout storage endpoints (/api/layouts, /api/layouts/preset, DELETE)', async () => {
+    // 1. GET initial layouts
+    const getRes = await fetch(`http://localhost:${testPort}/api/layouts`);
+    expect(getRes.status).toBe(200);
+    const initialData = await getRes.json();
+    expect(Array.isArray(initialData.presets)).toBe(true);
+
+    // 2. POST active layout
+    const postActiveRes = await fetch(`http://localhost:${testPort}/api/layouts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        activeLayout: {
+          presetName: 'API Test Rack',
+          gridCols: 24,
+          gridRows: 4,
+          items: [{ id: 'compressor', colSpan: 6, visible: true }],
+        },
+      }),
+    });
+    expect(postActiveRes.status).toBe(200);
+
+    // 3. POST new named preset
+    const postPresetRes = await fetch(`http://localhost:${testPort}/api/layouts/preset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        preset: {
+          presetName: 'Studio API Preset',
+          gridCols: 24,
+          gridRows: 4,
+          items: [{ id: 'meter_vu', colSpan: 8, visible: true }],
+        },
+      }),
+    });
+    expect(postPresetRes.status).toBe(200);
+    const presetBody = await postPresetRes.json();
+    expect(presetBody.ok).toBe(true);
+    expect(presetBody.presets.some((p: any) => p.presetName === 'Studio API Preset')).toBe(true);
+
+    // 4. DELETE preset
+    const delRes = await fetch(
+      `http://localhost:${testPort}/api/layouts/preset/${encodeURIComponent('Studio API Preset')}`,
+      { method: 'DELETE' }
+    );
+    expect(delRes.status).toBe(200);
+    const delBody = await delRes.json();
+    expect(delBody.presets.some((p: any) => p.presetName === 'Studio API Preset')).toBe(false);
+  });
 });

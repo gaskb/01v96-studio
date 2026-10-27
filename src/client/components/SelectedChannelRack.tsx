@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ClientCommand, ControlMode, InputChannelState } from '../../shared/types';
 import {
+  fetchServerLayouts,
   insertWidgetIntoLayout,
   loadStoredLayout,
   normalizeLayout,
@@ -40,6 +41,14 @@ export const SelectedChannelRack: React.FC<SelectedChannelRackProps> = ({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(channel.name);
+
+  useEffect(() => {
+    fetchServerLayouts().then((serverData) => {
+      if (serverData.activeLayout && !window.localStorage?.getItem('01v96_channel_layout_v5')) {
+        setLayout(serverData.activeLayout);
+      }
+    });
+  }, []);
 
   const gridCols = layout.gridCols || 24;
   const gridRows = layout.gridRows || 4;

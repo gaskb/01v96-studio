@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ClientCommand, ControlMode, InputChannelState, MixerState } from '../../shared/types';
 import {
+  fetchServerLayouts,
   insertWidgetIntoLayout,
   loadStoredLayout,
   normalizeLayout,
@@ -223,6 +224,14 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchServerLayouts().then((serverData) => {
+      if (serverData.activeLayout && !window.localStorage?.getItem('01v96_channel_layout_v5')) {
+        setLayout(serverData.activeLayout);
+      }
+    });
+  }, []);
 
   const gridCols = layout.gridCols || 24;
   const gridRows = layout.gridRows || 4;

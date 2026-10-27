@@ -42,7 +42,7 @@ export const GateCard: React.FC<GateCardProps> = ({
       </div>
 
       {controlMode === 'knobs' ? (
-        <div className="grid grid-cols-4 gap-2 py-2">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 py-2">
           <RotaryKnob
             label="THRESHOLD"
             value={channel.gate.threshold}
@@ -89,6 +89,21 @@ export const GateCard: React.FC<GateCardProps> = ({
             }
           />
           <RotaryKnob
+            label="HOLD"
+            value={channel.gate.hold}
+            min={0}
+            max={215}
+            step={1}
+            savedValue={savedChannel?.gate.hold}
+            defaultValue={10}
+            displayValue={`${channel.gate.hold}`}
+            color="#f59e0b"
+            size={52}
+            onChange={(val) =>
+              sendCommand({ type: 'set_gate', id: channel.id, param: 'hold', value: val })
+            }
+          />
+          <RotaryKnob
             label="DECAY"
             value={channel.gate.decay}
             min={0}
@@ -105,7 +120,7 @@ export const GateCard: React.FC<GateCardProps> = ({
           />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div
             onDoubleClick={(e) =>
               sendCommand({
@@ -238,6 +253,53 @@ export const GateCard: React.FC<GateCardProps> = ({
                     type: 'set_gate',
                     id: channel.id,
                     param: 'attack',
+                    value: val,
+                  })
+                )
+              }
+              className="w-full accent-amber-400 cursor-pointer"
+            />
+          </div>
+
+          <div
+            onDoubleClick={(e) =>
+              sendCommand({
+                type: 'set_gate',
+                id: channel.id,
+                param: 'hold',
+                value: resolveKnobReset(
+                  channel.gate.hold,
+                  savedChannel?.gate.hold,
+                  10,
+                  e.shiftKey || e.altKey
+                ),
+              })
+            }
+            title="Doppio click: ripristina valore memorizzato nella scena"
+          >
+            <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1 cursor-pointer select-none">
+              <span>HOLD</span>
+              <span className="text-slate-200">{channel.gate.hold}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={215}
+              value={channel.gate.hold}
+              onChange={(e) =>
+                sendCommand({
+                  type: 'set_gate',
+                  id: channel.id,
+                  param: 'hold',
+                  value: Number(e.target.value),
+                })
+              }
+              onWheel={(e) =>
+                handleSliderWheel(e, channel.gate.hold, 0, 215, 1, (val) =>
+                  sendCommand({
+                    type: 'set_gate',
+                    id: channel.id,
+                    param: 'hold',
                     value: val,
                   })
                 )
