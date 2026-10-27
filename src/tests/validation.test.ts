@@ -41,6 +41,31 @@ describe('Zod ClientCommand Validation (P2)', () => {
     expect(validateClientCommand({ type: 'set_pan', target: 'ch', id: 1, value: 64 }).success).toBe(false);
   });
 
+  it('validates set_att bounds (-960 to 180, allowing negative attenuation)', () => {
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: -960 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: -360 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: -10 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: 0 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: 180 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: -961 }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_att', id: 1, value: 181 }).success).toBe(false);
+  });
+
+  it('validates set_comp and set_delay commands', () => {
+    expect(
+      validateClientCommand({ type: 'set_comp', target: 'ch', id: 3, param: 'on', value: true }).success
+    ).toBe(true);
+    expect(
+      validateClientCommand({ type: 'set_comp', id: 3, param: 'on', value: true }).success
+    ).toBe(true);
+    expect(
+      validateClientCommand({ type: 'set_delay', id: 1, on: true, time: 250 }).success
+    ).toBe(true);
+    expect(
+      validateClientCommand({ type: 'set_delay', id: 1, on: false, time: 1001 }).success
+    ).toBe(false);
+  });
+
   it('validates sceneNumber bounds (0 to 99)', () => {
     expect(validateClientCommand({ type: 'recall_scene', sceneNumber: 0 }).success).toBe(true);
     expect(validateClientCommand({ type: 'recall_scene', sceneNumber: 99 }).success).toBe(true);

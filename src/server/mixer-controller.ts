@@ -119,9 +119,9 @@ export class MixerController {
       this.initialSync();
     }
 
-    // High-frequency meter polling (50ms interval)
+    // High-frequency meter polling (50ms interval) - throttled if sendQueue is busy
     this.meterInterval = setInterval(async () => {
-      if (this.transport.isConnected()) {
+      if (this.transport.isConnected() && this.transport.getQueueLength() < 2) {
         await this.transport.sendSysEx(buildMeterRequest());
       }
     }, 50);

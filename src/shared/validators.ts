@@ -42,7 +42,7 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_att'),
     id: z.number().int().min(1).max(32),
-    value: z.number().finite().min(0).max(96),
+    value: z.number().finite().min(-960).max(180),
   }),
 
   z.object({
@@ -75,7 +75,7 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
 
   z.object({
     type: z.literal('set_comp'),
-    target: targetChAuxBusStereo,
+    target: targetChAuxBusStereo.optional(),
     id: z.number().int().min(1).max(32),
     param: z.string(),
     value: z.union([z.number().finite(), z.boolean()]),
@@ -101,8 +101,8 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_delay'),
     id: z.number().int().min(1).max(32),
-    param: z.enum(['on', 'time']),
-    value: z.union([z.boolean(), z.number().finite()]),
+    on: z.boolean(),
+    time: z.number().finite().min(0).max(1000),
   }),
 
   z.object({

@@ -159,6 +159,7 @@ export class YamahaUsbTransport {
       this.iface = iface;
       this.outEndpoint = outEp;
       this.inEndpoint = inEp;
+      outEp.timeout = 500;
 
       inEp.on('data', (data: Buffer) => {
         if (this.onMessageCallback) {
@@ -167,9 +168,23 @@ export class YamahaUsbTransport {
       });
 
       inEp.on('error', (err) => {
-        console.error('[USB IN Error]', err.message);
-        this.disconnect();
+        console.error('[USB IN Error]', err?.message || err);
+        inEp.clearHalt(() => {
+          if (!this.connected) return;
+          try {
+            if (this.inEndpoint && !(this.inEndpoint as any).pollActive) {
+              this.inEndpoint.startPoll(3, 64);
+            }
+          } catch (restartErr) {
+            console.error('Failed to restart USB IN poll:', restartErr);
+            this.disconnect();
+          }
+        });
       });
+
+      // Clear any residual stalls from previous sessions before starting poll
+      inEp.clearHalt(() => {});
+      outEp.clearHalt(() => {});
 
       inEp.startPoll(3, 64);
       this.setConnected(true);
@@ -180,6 +195,10 @@ export class YamahaUsbTransport {
       this.setConnected(false);
       return false;
     }
+  }
+
+  getQueueLength(): number {
+    return this.sendQueue.length;
   }
 
   sendSysEx(sysex: number[]): Promise<void> {
@@ -218,6 +237,7 @@ export class YamahaUsbTransport {
           this.outEndpoint!.transfer(chunk, (err) => {
             if (err) {
               console.error('[USB OUT Error]', err.message);
+              this.outEndpoint?.clearHalt(() => {});
             }
             resChunk();
           });
@@ -236,7 +256,7 @@ export class YamahaUsbTransport {
 
   disconnect(): void {
     try {
-      if (this.inEndpoint) {
+      if (this.inEndpoint && (this.inEndpoint as any).pollActive) {
         this.inEndpoint.stopPoll(() => {
           this.cleanupDevice();
         });
@@ -244,7 +264,7 @@ export class YamahaUsbTransport {
         this.cleanupDevice();
       }
     } catch {
-      this.setConnected(false);
+      this.cleanupDevice();
     }
   }
 
