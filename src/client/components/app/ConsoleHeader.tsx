@@ -63,7 +63,7 @@ export const ConsoleHeader: React.FC<ConsoleHeaderProps> = ({
           {state.connected ? 'USB DIRECT LIVE' : 'SIMULATED / OFFLINE'}
         </div>
 
-        <div className="hidden 2xl:flex items-center gap-1 text-[10px] font-mono">
+        <div className="hidden md:flex items-center gap-1 text-[10px] font-mono">
           <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
             UI v{UI_VERSION}
           </span>
