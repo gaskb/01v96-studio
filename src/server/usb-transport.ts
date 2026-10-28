@@ -104,6 +104,12 @@ export class UsbMidiStreamParser {
   }
 }
 
+interface QueueItem {
+  chunks: Buffer[];
+  resolve: () => void;
+  key?: string;
+}
+
 export class YamahaUsbTransport {
   private device: usb.Device | null = null;
   private iface: usb.Interface | null = null;
@@ -113,8 +119,8 @@ export class YamahaUsbTransport {
   private connected = false;
   private onMessageCallback: ((msg: number[]) => void) | null = null;
   private onStatusChangeCallback: ((connected: boolean) => void) | null = null;
-  private highQueue: Array<{ chunks: Buffer[]; resolve: () => void }> = [];
-  private lowQueue: Array<{ chunks: Buffer[]; resolve: () => void }> = [];
+  private highQueue: QueueItem[] = [];
+  private lowQueue: QueueItem[] = [];
   private isProcessingQueue = false;
   private readonly PACING_MS = 1;
 
@@ -147,12 +153,32 @@ export class YamahaUsbTransport {
       } catch {
         // Ignore on macOS
       }
-      iface.claim();
+
+      try {
+        iface.claim();
+      } catch (claimErr) {
+        try {
+          dev.close();
+        } catch {
+          // ignore
+        }
+        throw claimErr;
+      }
 
       const outEp = iface.endpoints.find((e): e is usb.OutEndpoint => e.direction === 'out');
       const inEp = iface.endpoints.find((e): e is usb.InEndpoint => e.direction === 'in');
 
       if (!outEp || !inEp) {
+        try {
+          iface.release(true, () => {});
+        } catch {
+          // ignore
+        }
+        try {
+          dev.close();
+        } catch {
+          // ignore
+        }
         throw new Error('Could not find USB bulk IN/OUT endpoints on 01V96');
       }
 
@@ -228,8 +254,25 @@ export class YamahaUsbTransport {
       for (let i = 0; i < packet.length; i += 64) {
         chunks.push(packet.subarray(i, i + 64));
       }
+
+      let key: string | undefined;
+      // Coalescing: key parameter changes by (model, elem, param, channel)
+      if (sysex.length >= 8 && sysex[0] === 0xf0 && sysex[1] === 0x43) {
+        key = `${sysex[3]}:${sysex[4]}:${sysex[5]}:${sysex[6]}`;
+      }
+
       if (priority === 'high') {
-        this.highQueue.push({ chunks, resolve });
+        if (key) {
+          const existingIdx = this.highQueue.findIndex((item) => item.key === key);
+          if (existingIdx !== -1) {
+            const old = this.highQueue[existingIdx];
+            this.highQueue[existingIdx] = { chunks, resolve, key };
+            old.resolve();
+            this.processQueue();
+            return;
+          }
+        }
+        this.highQueue.push({ chunks, resolve, key });
       } else {
         this.lowQueue.push({ chunks, resolve });
       }

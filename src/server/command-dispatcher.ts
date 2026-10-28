@@ -568,6 +568,12 @@ export async function dispatchClientCommand(
       break;
     }
 
+    case 'set_layer': {
+      ctx.state.activeLayer = clampInt(cmd.layer, 0, 5, 0);
+      ctx.broadcastPatch({ activeLayer: ctx.state.activeLayer });
+      break;
+    }
+
     case 'recall_scene': {
       const pgm = clampInt(cmd.sceneNumber, 0, 99, 0);
       ctx.state.sceneNumber = pgm;

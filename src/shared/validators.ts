@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { ClientCommand } from './types.js';
 
 const targetChAuxBusStereo = z.enum(['ch', 'aux', 'bus', 'stereo']);
 const targetChAuxBus = z.enum(['ch', 'aux', 'bus']);
@@ -94,7 +93,6 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
     id: z.number().int().min(1).max(32),
     target: z.enum(['stereo', 'direct', 'bus']),
     busIndex: z.number().int().min(0).max(7).optional(),
-    busId: z.number().int().min(1).max(8).optional(),
     value: z.boolean(),
   }),
 
@@ -134,7 +132,19 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_effect'),
     rackId: z.number().int().min(1).max(4),
-    param: z.string(),
+    param: z.enum([
+      'mix',
+      'type',
+      'bypass',
+      'param1',
+      'param2',
+      'param3',
+      'param4',
+      'param5',
+      'param6',
+      'param7',
+      'param8',
+    ]),
     value: z.union([z.number().finite(), z.boolean()]),
   }),
 
@@ -188,7 +198,15 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('trigger_demo_wave'),
     mode: z.enum(['sine', 'bounce', 'v-shape', 'stop']).optional(),
   }),
-]);
+]).refine(
+  (cmd) => cmd.type !== 'set_routing' || cmd.target !== 'bus' || cmd.busIndex !== undefined,
+  {
+    message: 'busIndex (0..7) is required when target is "bus"',
+    path: ['busIndex'],
+  }
+);
+
+export type ClientCommand = z.infer<typeof ClientCommandSchema>;
 
 export function validateClientCommand(
   raw: unknown
@@ -200,5 +218,5 @@ export function validateClientCommand(
       .join(', ');
     return { success: false, error: errorMsg };
   }
-  return { success: true, data: result.data as ClientCommand };
+  return { success: true, data: result.data };
 }

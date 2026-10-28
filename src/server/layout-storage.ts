@@ -44,7 +44,9 @@ export class LayoutStorage {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf-8');
+      const tmpPath = `${this.filePath}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(this.data, null, 2), 'utf-8');
+      fs.renameSync(tmpPath, this.filePath);
     } catch (err) {
       console.error('Failed to save layouts file:', err);
     }

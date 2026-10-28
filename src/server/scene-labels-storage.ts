@@ -39,7 +39,9 @@ export class SceneLabelsStorage {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.labelsFilePath, JSON.stringify(this.store, null, 2), 'utf-8');
+      const tmpPath = `${this.labelsFilePath}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(this.store, null, 2), 'utf-8');
+      fs.renameSync(tmpPath, this.labelsFilePath);
     } catch (err) {
       console.error('Failed to save scene labels:', err);
     }

@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { faderToDbString, formatPan } from '../../shared/converters';
+import React, { useEffect, useRef, useState } from 'react';
+import { dbStringToFader, faderToDbString, formatPan } from '../../shared/converters';
 
 interface FaderStripProps {
   id: number;
@@ -47,6 +47,24 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(name);
+
+  const [editingFader, setEditingFader] = useState(false);
+  const [faderDraft, setFaderDraft] = useState('');
+  const faderInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (editingFader && faderInputRef.current) {
+      faderInputRef.current.focus();
+      faderInputRef.current.select();
+    }
+  }, [editingFader]);
+
+  const commitFaderEdit = () => {
+    setEditingFader(false);
+    if (!faderDraft.trim()) return;
+    const targetVal = dbStringToFader(faderDraft);
+    onChangeFader(targetVal);
+  };
 
   const resetFader = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -320,18 +338,41 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         </div>
       </div>
 
-      {/* Numeric dB Readout (Double-Click resets fader too!) */}
-      <div
-        onDoubleClick={resetFader}
-        title="Doppio click per ripristinare il valore salvato nella scena o 0.0 dB"
-        className={`w-full py-0.5 ${
-          isExpansionBank
-            ? 'bg-[#090712] hover:bg-purple-950/60 border-purple-900/50 text-purple-300/80 hover:text-purple-200'
-            : 'bg-[#070a0f] hover:bg-slate-900 border-slate-800/80 text-slate-300 hover:text-cyan-300'
-        } border rounded text-center text-[10px] font-mono cursor-pointer transition`}
-      >
-        {faderToDbString(fader)}
-      </div>
+      {/* Numeric dB Readout (Click to type, Double-Click resets fader) */}
+      {editingFader ? (
+        <input
+          ref={faderInputRef}
+          type="text"
+          value={faderDraft}
+          onChange={(e) => setFaderDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              commitFaderEdit();
+            } else if (e.key === 'Escape') {
+              setEditingFader(false);
+            }
+          }}
+          onBlur={commitFaderEdit}
+          className="w-full py-0.5 bg-slate-900 text-cyan-300 border border-cyan-400 rounded text-center text-[10px] font-mono outline-none shadow-[0_0_8px_rgba(6,182,212,0.4)]"
+        />
+      ) : (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setFaderDraft(faderToDbString(fader).replace(' dB', ''));
+            setEditingFader(true);
+          }}
+          onDoubleClick={resetFader}
+          title="Clicca per inserire i dB con la tastiera, doppio click per ripristinare"
+          className={`w-full py-0.5 ${
+            isExpansionBank
+              ? 'bg-[#090712] hover:bg-purple-950/60 border-purple-900/50 text-purple-300/80 hover:text-purple-200 hover:border-purple-400'
+              : 'bg-[#070a0f] hover:bg-slate-900 border-slate-800/80 text-slate-300 hover:text-cyan-300 hover:border-cyan-400/60'
+          } border rounded text-center text-[10px] font-mono cursor-pointer transition`}
+        >
+          {faderToDbString(fader)}
+        </div>
+      )}
     </div>
   );
 };

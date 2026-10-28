@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { freqHzToEqIndex } from '../../shared/converters';
 
 export interface RotaryKnobProps {
   label: string;
@@ -81,6 +82,64 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
 
   const lastSentRef = useRef(value);
   lastSentRef.current = value;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editInput, setEditInput] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const cleaned = displayValue.replace(/[^\d.-]/g, '');
+    setEditInput(cleaned || String(value));
+    setIsEditing(true);
+  };
+
+  const commitEdit = () => {
+    setIsEditing(false);
+    const trimmed = editInput.trim().toLowerCase();
+    if (!trimmed) return;
+
+    // Check if frequency (e.g. "1k", "2.5kHz", "250Hz")
+    if (
+      displayValue.includes('Hz') ||
+      trimmed.endsWith('k') ||
+      trimmed.endsWith('khz') ||
+      trimmed.endsWith('hz')
+    ) {
+      let hz = parseFloat(trimmed);
+      if (trimmed.includes('k')) {
+        hz = parseFloat(trimmed.replace('k', '')) * 1000;
+      }
+      if (!isNaN(hz)) {
+        const idx = freqHzToEqIndex(hz);
+        onChange(clamp(idx));
+        return;
+      }
+    }
+
+    const parsed = parseFloat(trimmed);
+    if (isNaN(parsed)) return;
+
+    // Smart dB detection: if displayValue contains dB and internal range is tenths of dB
+    const isDbKnob = displayValue.includes('dB') || displayValue.includes('db');
+    const isTenthsScale = Math.abs(min) >= 100 || Math.abs(max) >= 100;
+
+    let targetVal = parsed;
+    if (isDbKnob && isTenthsScale) {
+      if (Math.abs(parsed) <= 100 && parsed * 10 >= min - 50 && parsed * 10 <= max + 50) {
+        targetVal = Math.round(parsed * 10);
+      }
+    }
+
+    onChange(clamp(targetVal));
+  };
 
   useEffect(() => {
     if (!dragging) return;
@@ -237,19 +296,39 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
         </svg>
       </div>
 
-      {/* Numeric Readout Badge (Double-click also triggers reset) */}
+      {/* Numeric Readout Badge (Click to type exact value, Double-click to reset) */}
       <div className="flex items-center gap-1">
         {subControls}
-        <span
-          onDoubleClick={handleDoubleClick}
-          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition cursor-pointer leading-tight ${
-            hasSavedDiff
-              ? 'bg-slate-950 text-amber-300 border-amber-500/40'
-              : 'bg-slate-950/90 text-slate-100 border-slate-800/90 group-hover:border-slate-700'
-          }`}
-        >
-          {displayValue}
-        </span>
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editInput}
+            onChange={(e) => setEditInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                commitEdit();
+              } else if (e.key === 'Escape') {
+                setIsEditing(false);
+              }
+            }}
+            onBlur={commitEdit}
+            className="w-14 px-1 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-900 text-cyan-300 border border-cyan-400 outline-none text-center shadow-[0_0_8px_rgba(6,182,212,0.4)]"
+          />
+        ) : (
+          <span
+            onClick={startEditing}
+            onDoubleClick={handleDoubleClick}
+            title="Clicca per inserire il valore con la tastiera, doppio click per ripristinare"
+            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition cursor-pointer leading-tight ${
+              hasSavedDiff
+                ? 'bg-slate-950 text-amber-300 border-amber-500/40 hover:border-amber-400'
+                : 'bg-slate-950/90 text-slate-100 border-slate-800/90 group-hover:border-slate-700 hover:border-cyan-400/70'
+            }`}
+          >
+            {displayValue}
+          </span>
+        )}
       </div>
     </div>
   );

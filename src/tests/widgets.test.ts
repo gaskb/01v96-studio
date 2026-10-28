@@ -9,7 +9,6 @@ function createMockChannel(id: number = 1): InputChannelState {
   return {
     id,
     name: `CH${id}`,
-    customLabel: 'Vocal 1',
     on: true,
     solo: false,
     fader: 823,
@@ -78,7 +77,7 @@ describe('WidgetRenderer (src/client/components/channel-layout/WidgetRenderer.ts
         widgetId,
         ch,
         undefined,
-        'direct',
+        'knobs',
         sendCommand,
         auxNames,
         busNames
@@ -97,7 +96,7 @@ describe('WidgetRenderer (src/client/components/channel-layout/WidgetRenderer.ts
         widgetId,
         ch,
         ch, // with savedCh
-        'scene_compare',
+        'sliders',
         sendCommand,
         auxNames,
         busNames
@@ -112,7 +111,7 @@ describe('WidgetRenderer (src/client/components/channel-layout/WidgetRenderer.ts
       'invalid_widget_xyz' as WidgetId,
       ch,
       undefined,
-      'direct',
+      'knobs',
       sendCommand
     );
 
@@ -124,7 +123,7 @@ describe('WidgetRenderer (src/client/components/channel-layout/WidgetRenderer.ts
       'aux_1_2',
       ch,
       undefined,
-      'direct',
+      'knobs',
       sendCommand,
       undefined,
       undefined
@@ -136,7 +135,7 @@ describe('WidgetRenderer (src/client/components/channel-layout/WidgetRenderer.ts
       'routing',
       ch,
       undefined,
-      'direct',
+      'knobs',
       sendCommand
     );
 

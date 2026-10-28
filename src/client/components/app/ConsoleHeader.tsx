@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   API_VERSION,
   ClientCommand,
@@ -24,6 +24,19 @@ export const ConsoleHeader: React.FC<ConsoleHeaderProps> = ({
   onOpenSceneModal,
   sendCommand,
 }) => {
+  const [confirmDemoOpen, setConfirmDemoOpen] = useState(false);
+
+  const handleToggleDemo = () => {
+    if (state.demoWaveActive) {
+      sendCommand({ type: 'trigger_demo_wave', mode: 'stop' });
+      return;
+    }
+    if (state.connected) {
+      setConfirmDemoOpen(true);
+    } else {
+      sendCommand({ type: 'trigger_demo_wave', mode: 'sine' });
+    }
+  };
   return (
     <header className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 bg-[#0d121b] border-b border-slate-800/90 shrink-0">
       {/* Brand & Dual Version Badges (gaskb_style) */}
@@ -113,12 +126,7 @@ export const ConsoleHeader: React.FC<ConsoleHeaderProps> = ({
 
         {/* 🌊 DEMO MODE (OLA) BUTTON */}
         <button
-          onClick={() =>
-            sendCommand({
-              type: 'trigger_demo_wave',
-              mode: state.demoWaveActive ? 'stop' : 'sine',
-            })
-          }
+          onClick={handleToggleDemo}
           className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold tracking-wide transition cursor-pointer flex items-center gap-1.5 ${
             state.demoWaveActive
               ? 'bg-gradient-to-r from-rose-500 via-amber-500 to-cyan-500 text-slate-950 animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.7)]'
@@ -129,6 +137,48 @@ export const ConsoleHeader: React.FC<ConsoleHeaderProps> = ({
           <span>{state.demoWaveActive ? 'STOP OLA' : 'DEMO MODE'}</span>
         </button>
       </div>
+
+      {/* Confirmation Modal for Live Hardware Demo Mode */}
+      {confirmDemoOpen && (
+        <div
+          onClick={() => setConfirmDemoOpen(false)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-none"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#0e131d] border border-amber-500/60 rounded-2xl p-5 max-w-md w-full flex flex-col gap-4 shadow-[0_0_30px_rgba(245,158,11,0.2)]"
+          >
+            <div className="flex items-center gap-3 text-amber-400">
+              <span className="text-2xl">⚠️</span>
+              <h3 className="font-mono font-bold text-sm text-white">
+                CONFERMA MODALITÀ DEMO (OLA)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 font-mono leading-relaxed">
+              Il mixer Yamaha 01V96 è connesso <span className="text-emerald-400 font-bold">LIVE via USB</span>.
+              L'avvio della demo muoverà <strong className="text-amber-300">fisicamente i fader motorizzati</strong> dei canali 1-16 (fino a +10 dB).
+              Se il mixer è collegato all'impianto audio o alle cuffie, questo modificherà i livelli reali.
+            </p>
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setConfirmDemoOpen(false)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono cursor-pointer transition"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmDemoOpen(false);
+                  sendCommand({ type: 'trigger_demo_wave', mode: 'sine' });
+                }}
+                className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono font-bold text-xs cursor-pointer transition shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+              >
+                Avvia Demo Comunque
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

@@ -25,6 +25,26 @@ export function faderToDbString(val: number): string {
 }
 
 /**
+ * Convert user-entered dB value string (e.g. "0", "-10", "+5.5", "-inf") to 0..1023 Yamaha fader value
+ */
+export function dbStringToFader(str: string): number {
+  const clean = str.trim().toLowerCase().replace('db', '').replace('+', '').trim();
+  if (clean === '-inf' || clean === '-∞' || clean === 'inf' || clean === '-infinity') return 0;
+  const db = parseFloat(clean);
+  if (isNaN(db)) return 823; // fallback 0.0 dB
+  if (db >= 10.0) return 1023;
+  if (db <= -138) return 0;
+  if (db >= -20.0) {
+    return Math.max(0, Math.min(1023, Math.round(db * 20 + 823)));
+  }
+  if (db >= -50.0) {
+    return Math.max(0, Math.min(1023, Math.round(423 + (db + 20) * 10)));
+  }
+  const val = Math.round(123 + (db + 50) * (123 / 88));
+  return Math.max(0, Math.min(1023, val));
+}
+
+/**
  * Convert Yamaha EQ Frequency index (0..119) to Hz (21.2 Hz .. 20.0 kHz)
  */
 export function eqIndexToFreqHz(idx: number): number {

@@ -91,7 +91,12 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
 
           {/* GR METER (Gain Reduction fills from top down) */}
           <div className="flex flex-col items-center h-full w-4 justify-between">
-            <span className="text-[8px] font-mono text-rose-400 font-bold">GR</span>
+            <span
+              title="Gain Reduction stimata dal simulatore software"
+              className="text-[8px] font-mono text-rose-400 font-bold cursor-help"
+            >
+              GR~
+            </span>
             <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-start p-[1px] my-1">
               <div
                 className="w-full rounded-full bg-gradient-to-b from-rose-500 to-amber-500"
@@ -105,7 +110,12 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
 
           {/* OUT METER */}
           <div className="flex flex-col items-center h-full w-4 justify-between">
-            <span className="text-[8px] font-mono text-emerald-400 font-bold">OUT</span>
+            <span
+              title="Livello Post-DSP calcolato dal simulatore software"
+              className="text-[8px] font-mono text-emerald-400 font-bold cursor-help"
+            >
+              OUT~
+            </span>
             <div className="flex-1 w-2 bg-[#05080d] rounded-full border border-slate-800/90 overflow-hidden flex flex-col justify-end p-[1px] my-1">
               <div
                 className="w-full rounded-full"
@@ -145,14 +155,24 @@ export const InOutMeterBridge: React.FC<InOutMeterBridgeProps> = ({
         {/* GR BAR */}
         {grDb > 0.1 && (
           <div className="flex items-center gap-1">
-            <span className="text-[9px] font-mono font-bold text-rose-400">GR</span>
+            <span
+              title="Gain Reduction stimata"
+              className="text-[9px] font-mono font-bold text-rose-400 cursor-help"
+            >
+              GR~
+            </span>
             <span className="text-[9px] font-mono text-rose-300">-{grDb.toFixed(1)}dB</span>
           </div>
         )}
 
         {/* OUT BAR */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[9px] font-mono font-bold text-emerald-400">OUT</span>
+          <span
+            title="Livello Post-DSP calcolato"
+            className="text-[9px] font-mono font-bold text-emerald-400 cursor-help"
+          >
+            OUT~
+          </span>
           <div className="w-16 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
             <div
               className="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"

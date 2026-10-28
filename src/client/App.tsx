@@ -5,10 +5,12 @@ import { SystemMenusPanel } from './components/SystemMenusPanel';
 import { ConsoleFadersView } from './components/app/ConsoleFadersView';
 import { ConsoleHeader } from './components/app/ConsoleHeader';
 import { SceneModal } from './components/app/SceneModal';
+import { ToastContainer } from './components/Toast';
 import { useMixerWebSocket } from './hooks/useMixerWebSocket';
 
 export const App: React.FC = () => {
-  const { state, savedState, liveMeters, wsConnected, sendCommand } = useMixerWebSocket();
+  const { state, savedState, liveMeters, wsConnected, sendCommand, toasts, dismissToast } =
+    useMixerWebSocket();
   const [controlMode, setControlMode] = useState<ControlMode>(() => {
     const stored = window.localStorage.getItem('01v96_control_mode');
     return stored === 'sliders' ? 'sliders' : 'knobs';
@@ -81,6 +83,9 @@ export const App: React.FC = () => {
           sendCommand={sendCommand}
         />
       )}
+
+      {/* ERROR TOAST NOTIFICATIONS */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 };

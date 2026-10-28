@@ -13,6 +13,7 @@ export const SceneModal: React.FC<SceneModalProps> = ({
   sendCommand,
 }) => {
   const [storeTitleDraft, setStoreTitleDraft] = useState(state.sceneTitle);
+  const [confirmStoreOpen, setConfirmStoreOpen] = useState(false);
 
   return (
     <div
@@ -56,19 +57,49 @@ export const SceneModal: React.FC<SceneModalProps> = ({
             className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-cyan-300 outline-none"
           />
           <button
-            onClick={() => {
-              sendCommand({
-                type: 'store_scene',
-                sceneNumber: state.sceneNumber,
-                title: storeTitleDraft,
-              });
-              onClose();
-            }}
-            className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-mono font-bold text-xs cursor-pointer transition"
+            onClick={() => setConfirmStoreOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 text-slate-950 font-mono font-bold text-xs cursor-pointer transition shadow-[0_0_12px_rgba(244,63,94,0.4)]"
           >
             💾 STORE ON #{String(state.sceneNumber).padStart(2, '0')}
           </button>
         </div>
+
+        {/* Confirmation Dialog for Scene Store */}
+        {confirmStoreOpen && (
+          <div className="bg-rose-950/40 border border-rose-500/60 rounded-xl p-3 flex flex-col gap-2.5 animate-in fade-in">
+            <div className="flex items-center gap-2 text-rose-300 font-mono text-xs font-bold">
+              <span>⚠️</span>
+              <span>CONFERMA SOVRASCRITTURA SCENA #{String(state.sceneNumber).padStart(2, '0')}</span>
+            </div>
+            <p className="text-[11px] font-mono text-slate-300">
+              Sei sicuro di voler sovrascrivere lo slot #{state.sceneNumber} sul mixer con il titolo &quot;
+              <span className="text-cyan-300 font-bold">{storeTitleDraft || state.sceneTitle}</span>&quot;?
+              Le impostazioni precedentemente salvate in questo slot verranno rimpiazzate.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmStoreOpen(false)}
+                className="px-2.5 py-1 rounded bg-slate-800 text-slate-300 text-xs font-mono cursor-pointer"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmStoreOpen(false);
+                  sendCommand({
+                    type: 'store_scene',
+                    sceneNumber: state.sceneNumber,
+                    title: storeTitleDraft,
+                  });
+                  onClose();
+                }}
+                className="px-3 py-1 rounded bg-rose-500 hover:bg-rose-400 text-slate-950 text-xs font-mono font-bold cursor-pointer transition"
+              >
+                Conferma Sovrascrittura
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Recall Grid */}
         <div>

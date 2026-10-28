@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.5.6';
-export const UI_VERSION = '0.5.6';
-export const API_VERSION = '0.5.4';
+export const APP_VERSION = '0.5.7';
+export const UI_VERSION = '0.5.7';
+export const API_VERSION = '0.5.7';
 
 export type ControlMode = 'knobs' | 'sliders';
 
@@ -153,35 +153,7 @@ export interface MixerState {
   setup: MixerSetupState;
 }
 
-export type ClientCommand =
-  | { type: 'set_fader'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; value: number }
-  | { type: 'set_on'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; value: boolean }
-  | { type: 'set_solo'; target: 'ch'; id: number; value: boolean }
-  | { type: 'set_pan'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; value: number }
-  | { type: 'set_phase'; id: number; value: boolean }
-  | { type: 'set_att'; id: number; value: number }
-  | { type: 'set_pair'; id: number; value: boolean }
-  | { type: 'set_name'; target?: 'ch' | 'aux' | 'bus'; id: number; name: string }
-  | { type: 'set_eq'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; param: string; value: number | boolean }
-  | { type: 'set_gate'; id: number; param: string; value: number | boolean }
-  | { type: 'set_comp'; target: 'ch' | 'aux' | 'bus' | 'stereo'; id: number; param: string; value: number | boolean }
-  | { type: 'set_routing'; id: number; target: 'stereo' | 'direct' | 'bus'; busIndex?: number; value: boolean }
-  | { type: 'set_aux_send'; chId: number; auxId: number; param: 'on' | 'pre' | 'level'; value: number | boolean }
-  | { type: 'set_delay'; id: number; on: boolean; time: number }
-  | { type: 'select_channel'; id: number }
-  | { type: 'set_dual_view'; enabled: boolean }
-  | { type: 'set_deep_pair'; enabled: boolean }
-  | { type: 'recall_scene'; sceneNumber: number }
-  | { type: 'store_scene'; sceneNumber: number; title?: string }
-  | { type: 'set_effect'; rackId: number; param: 'bypass' | 'mix' | 'type' | 'param1' | 'param2' | 'param3' | 'param4'; value: number | boolean }
-  | { type: 'set_geq'; unitId: number; param: 'on' | 'flat' | 'band'; bandIndex?: number; value: number | boolean }
-  | { type: 'set_input_patch'; chId: number; sourcePort: number }
-  | { type: 'set_omni_patch'; omniId: number; sourceBus: number }
-  | { type: 'set_lcd_screen'; screenNo: number; tabNo?: number }
-  | { type: 'set_setup_param'; param: 'meterInputPoint' | 'meterOutputPoint' | 'peakHold' | 'wordClockMaster' | 'brightness'; value: number | boolean }
-  | { type: 'sync_channel_strip'; id: number }
-  | { type: 'sync_all' }
-  | { type: 'trigger_demo_wave'; mode?: 'sine' | 'bounce' | 'v-shape' | 'stop' };
+export type { ClientCommand } from './validators.js';
 
 export interface WidgetLayoutItem {
   id: string;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COMP_RATIOS,
+  dbStringToFader,
   eqIndexToFreqHz,
   eqIndexToQValue,
   faderToDbString,
@@ -8,6 +9,8 @@ import {
   formatFreqHz,
   formatPan,
   freqHzToEqIndex,
+  getPairedChannelId,
+  getPairedChannelIndex,
 } from '../shared/converters.js';
 
 describe('Shared Audio Converters (src/shared/converters.ts)', () => {
@@ -39,6 +42,18 @@ describe('Shared Audio Converters (src/shared/converters.ts)', () => {
       const dbStr = faderToDbString(50);
       expect(dbStr).toMatch(/^-\d+ dB$/);
       expect(parseInt(dbStr.replace(' dB', ''), 10)).toBeLessThan(-50);
+    });
+
+    it('converts user dB string input back to fader value with dbStringToFader', () => {
+      expect(dbStringToFader('0.0 dB')).toBe(823);
+      expect(dbStringToFader('0')).toBe(823);
+      expect(dbStringToFader('+10 dB')).toBe(1023);
+      expect(dbStringToFader('-10 dB')).toBe(623);
+      expect(dbStringToFader('-20 dB')).toBe(423);
+      expect(dbStringToFader('-50 dB')).toBe(123);
+      expect(dbStringToFader('-inf')).toBe(0);
+      expect(dbStringToFader('-∞ dB')).toBe(0);
+      expect(dbStringToFader('invalid')).toBe(823);
     });
   });
 

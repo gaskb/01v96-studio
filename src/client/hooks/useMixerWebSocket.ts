@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClientCommand, MixerState } from '../../shared/types';
+import { ToastMessage } from '../components/Toast';
 
 export interface LiveMetersState {
   metersIn: Record<string, number>;
@@ -18,9 +19,19 @@ export function useMixerWebSocket() {
     stereoMeter: 0,
   });
   const [wsConnected, setWsConnected] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const latestMetersRef = useRef<LiveMetersState | null>(null);
   const animFrameRequestedRef = useRef(false);
+
+  const addToast = useCallback((message: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    setToasts((prev) => [...prev.slice(-4), { id, message, timestamp: Date.now() }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
@@ -82,15 +93,11 @@ export function useMixerWebSocket() {
           } else if (msg.type === 'state_patch') {
             setState((prev) => {
               if (!prev) return prev;
-              const next = { ...prev, ...msg.patch };
-              if (
-                msg.patch.sceneNumber !== undefined &&
-                msg.patch.sceneNumber !== prev.sceneNumber
-              ) {
-                setSavedState(structuredClone(next));
-              }
-              return next;
+              return { ...prev, ...msg.patch };
             });
+            if (msg.patch.sceneNumber !== undefined) {
+              setSavedState((prevSaved) => (prevSaved ? { ...prevSaved, ...msg.patch } : prevSaved));
+            }
           } else if (msg.type === 'channel_update') {
             setState((prev) => {
               if (!prev) return prev;
@@ -137,6 +144,9 @@ export function useMixerWebSocket() {
               );
               return { ...prev, channels };
             });
+          } else if (msg.type === 'error') {
+            console.error('[Mixer Error]', msg.message);
+            addToast(msg.message || 'Errore dal mixer');
           }
         } catch {
           // ignore malformed messages
@@ -154,7 +164,7 @@ export function useMixerWebSocket() {
       clearTimeout(reconnectTimer);
       wsRef.current?.close();
     };
-  }, []);
+  }, [addToast]);
 
   const sendCommand = useCallback((cmd: ClientCommand) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -164,9 +174,19 @@ export function useMixerWebSocket() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cmd),
-      }).catch(() => {});
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            addToast(data.error || `Errore HTTP ${res.status}`);
+          }
+        })
+        .catch((err) => {
+          console.error('[HTTP Command Error]', err);
+          addToast('Impossibile inviare comando: connessione persa');
+        });
     }
-  }, []);
+  }, [addToast]);
 
   return {
     state,
@@ -174,5 +194,7 @@ export function useMixerWebSocket() {
     liveMeters,
     wsConnected,
     sendCommand,
+    toasts,
+    dismissToast,
   };
 }

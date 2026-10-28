@@ -190,4 +190,19 @@ export function createServer(port = Number(process.env.PORT) || 8096, customLayo
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const srv = createServer();
   srv.start();
+
+  const shutdown = async (signal: string) => {
+    console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
+    try {
+      await srv.stop();
+      console.log('✅ Yamaha 01V96 Studio Server stopped cleanly.');
+      process.exit(0);
+    } catch (err) {
+      console.error('Error during shutdown:', err);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
 }

@@ -88,6 +88,29 @@ describe('Zod ClientCommand Validation (P2)', () => {
     ).toBe(false);
   });
 
+  it('validates set_routing requiring busIndex for bus target', () => {
+    // Valid stereo and direct routing
+    expect(validateClientCommand({ type: 'set_routing', id: 1, target: 'stereo', value: true }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_routing', id: 1, target: 'direct', value: false }).success).toBe(true);
+
+    // Bus routing with valid busIndex (0..7)
+    expect(validateClientCommand({ type: 'set_routing', id: 1, target: 'bus', busIndex: 0, value: true }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_routing', id: 1, target: 'bus', busIndex: 7, value: false }).success).toBe(true);
+
+    // Bus routing missing busIndex MUST be rejected
+    expect(validateClientCommand({ type: 'set_routing', id: 1, target: 'bus', value: true }).success).toBe(false);
+    // Invalid busIndex out of bounds
+    expect(validateClientCommand({ type: 'set_routing', id: 1, target: 'bus', busIndex: 8, value: true }).success).toBe(false);
+  });
+
+  it('validates set_effect parameters', () => {
+    expect(validateClientCommand({ type: 'set_effect', rackId: 1, param: 'mix', value: 50 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_effect', rackId: 2, param: 'param1', value: 120 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_effect', rackId: 3, param: 'param8', value: 0 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_effect', rackId: 4, param: 'bypass', value: true }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_effect', rackId: 1, param: 'invalid_param', value: 10 }).success).toBe(false);
+  });
+
   it('rejects malformed or empty payloads', () => {
     expect(validateClientCommand(null).success).toBe(false);
     expect(validateClientCommand(undefined).success).toBe(false);
