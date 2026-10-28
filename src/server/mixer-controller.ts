@@ -52,6 +52,9 @@ export class MixerController {
   private effectTitleChars: Map<number, string[]> = new Map();
   private channelNameChars: Map<number, string[]> = new Map();
   private labelsStorage: SceneLabelsStorage;
+  private isSyncing = false;
+  private pendingSceneResync = false;
+  private syncSessionId = 0;
 
   constructor(broadcastCallback: (msg: unknown) => void) {
     this.broadcastCallback = broadcastCallback;
@@ -118,12 +121,12 @@ export class MixerController {
       this.initialSync();
     }
 
-    // High-frequency meter polling (35ms interval ~ 28 fps) - throttled if sendQueue is busy
+    // Live meter streaming keepalive (3000ms - Yamaha 01V96 streams continuous meters via USB IN on its own)
     this.meterInterval = setInterval(async () => {
-      if (this.transport.isConnected() && this.transport.getQueueLength() < 2) {
-        await this.transport.sendSysEx(buildMeterRequest());
+      if (this.transport.isConnected()) {
+        await this.transport.sendSysEx(buildMeterRequest(), 'high');
       }
-    }, 35);
+    }, 3000);
 
     // Auto-reconnect monitoring every 3s
     this.reconnectInterval = setInterval(async () => {
@@ -141,62 +144,64 @@ export class MixerController {
     if (this.meterInterval) clearInterval(this.meterInterval);
     if (this.reconnectInterval) clearInterval(this.reconnectInterval);
     if (this.sceneSyncDebounceTimer) clearTimeout(this.sceneSyncDebounceTimer);
+    this.transport.clearLowPriorityQueue();
     this.transport.disconnect();
   }
 
   async initialSync(): Promise<void> {
     if (!this.transport.isConnected()) return;
+    this.syncSessionId++;
+    const currentSession = this.syncSessionId;
+    const startTime = Date.now();
     console.log('🔄 Synchronizing state from Yamaha 01V96 VCM...');
     this.dirtyParams.clear();
+    this.transport.clearLowPriorityQueue();
 
-    await this.transport.sendSysEx(buildMeterRequest());
-    await this.transport.sendSysEx(buildOutputMeterRequest());
+    // 1. Meter Streaming Start
+    await this.transport.sendSysEx(buildMeterRequest(), 'high');
+    await this.transport.sendSysEx(buildOutputMeterRequest(), 'high');
 
-    // Query Scene Title (16 chars)
+    // 2. Query Scene Title (16 chars)
     for (let p = 0; p < 16; p++) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_SCENE_TITLE, p, 0));
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_SCENE_TITLE, p, 0), 'high');
     }
 
-    // Query Faders, On, Pan, Phase, Att, Patch, and 4-Band EQ for all 32 input channels
+    // 3. Faders, On, Pan, Phase, Att, Pair, Solo, Patch, and Track Names (4 chars) for all 32 channels
     for (let ch = 0; ch < 32; ch++) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PAN, 0, ch));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PHASE, 0, ch));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, ch));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PAIR, 0, ch));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 3, 46, 0, ch)); // Solo
-      await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 1, 0, ch)); // Input Patch
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PAN, 0, ch), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PAIR, 0, ch), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, ch), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_PHASE, 0, ch), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 3, 46, 0, ch), 'high'); // Solo
+      await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 1, 0, ch), 'high'); // Input Patch
       for (let p = 0; p < 4; p++) {
-        await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 4, p, ch)); // Short Name
+        await this.transport.sendSysEx(buildParamRequest(MODEL_01V96, 2, 4, p, ch), 'high'); // Short Name
       }
-      for (let p = 1; p <= 15; p++) {
-        await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, p, ch));
-      }
-      await this.delay(10);
     }
 
-    // Query AUX 1..8 Masters & BUS 1..8 Masters & Stereo Out
+    // 4. Query AUX 1..8 Masters & BUS 1..8 Masters & Stereo Out
     for (let i = 0; i < 8; i++) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_AUX_FADER, 0, i));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_AUX_ON, 0, i));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_BUS_FADER, 0, i));
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_BUS_ON, 0, i));
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_AUX_FADER, 0, i), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_AUX_ON, 0, i), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_BUS_FADER, 0, i), 'high');
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_BUS_ON, 0, i), 'high');
     }
-    await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_STEREO_FADER, 0, 0));
-    await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_STEREO_ON, 0, 0));
+    await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_STEREO_FADER, 0, 0), 'high');
+    await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_STEREO_ON, 0, 0), 'high');
 
-    // Query Effects 1..4 Titles & Bypass/Mix
+    // 5. Query Effects 1..4 Titles & Bypass/Mix/Type (for effect picker selection)
     for (let fx = 0; fx < 4; fx++) {
       for (let p = 0; p < 16; p++) {
-        await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, p, fx));
+        await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, p, fx), 'high');
       }
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 48, fx)); // Mix
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 49, fx)); // Type
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 52, fx)); // Bypass
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 48, fx), 'high'); // Mix
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 49, fx), 'high'); // Type
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_EFFECT, 52, fx), 'high'); // Bypass
     }
 
-    // Sync full Channel Strip for Selected Channel (and its adjacent pair channel!)
+    // 6. Sync full Channel Strip (EQ, Gate, Comp, Aux Sends, Routing) for Selected Channel (and its pair)
     await this.syncChannelStrip(this.state.selectedChannel);
     const pairCh =
       this.state.selectedChannel % 2 === 1
@@ -205,7 +210,32 @@ export class MixerController {
     if (pairCh >= 1 && pairCh <= 32) {
       await this.syncChannelStrip(pairCh);
     }
-    console.log('✅ Initial synchronization complete!');
+
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ Immediate synchronization complete in ${elapsed}ms! Surface and selected channel active.`);
+
+    // 7. Background Phase: query remaining 31 channels EQ curves with low priority
+    this.syncRemainingChannelsInBackground(currentSession);
+  }
+
+  private async syncRemainingChannelsInBackground(sessionId: number): Promise<void> {
+    const selCh = this.state.selectedChannel;
+    const pairCh = selCh % 2 === 1 ? selCh + 1 : selCh - 1;
+
+    for (let ch = 0; ch < 32; ch++) {
+      if (sessionId !== this.syncSessionId) return; // Scene was changed or sync cancelled, abort!
+      const chId = ch + 1;
+      if (chId === selCh || chId === pairCh) continue; // Already loaded in high priority!
+
+      for (let p = 1; p <= 15; p++) {
+        if (sessionId !== this.syncSessionId) return;
+        await this.transport.sendSysEx(
+          buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, p, ch),
+          'low'
+        );
+      }
+      await this.delay(10);
+    }
   }
 
   async syncChannelStrip(channelId: number): Promise<void> {
@@ -213,22 +243,22 @@ export class MixerController {
     const ch = Math.max(0, Math.min(31, channelId - 1));
 
     for (let p = 1; p <= 15; p++) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, p, ch));
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, p, ch), 'high');
     }
     for (const p of Object.values(GATE_PARAM_MAP)) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_GATE, p, ch));
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_GATE, p, ch), 'high');
     }
     for (const p of Object.values(COMP_PARAM_MAP)) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_COMP, p, ch));
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_COMP, p, ch), 'high');
     }
-    await this.delay(6);
     for (let p = 0; p <= 10; p++) {
       await this.transport.sendSysEx(
-        buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, p, ch)
+        buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, p, ch),
+        'high'
       );
     }
     for (let p = 0; p < 24; p++) {
-      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, p, ch));
+      await this.transport.sendSysEx(buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, p, ch), 'high');
     }
   }
 
@@ -236,9 +266,25 @@ export class MixerController {
     if (this.sceneSyncDebounceTimer) {
       clearTimeout(this.sceneSyncDebounceTimer);
     }
-    this.sceneSyncDebounceTimer = setTimeout(() => {
-      this.initialSync();
-    }, 250);
+    // Cancel any low-priority background queries immediately!
+    this.transport.clearLowPriorityQueue();
+
+    this.sceneSyncDebounceTimer = setTimeout(async () => {
+      if (this.isSyncing) {
+        this.pendingSceneResync = true;
+        return;
+      }
+      this.isSyncing = true;
+      try {
+        await this.initialSync();
+      } finally {
+        this.isSyncing = false;
+        if (this.pendingSceneResync) {
+          this.pendingSceneResync = false;
+          this.scheduleSceneResync();
+        }
+      }
+    }, 200);
   }
 
   public handleIncomingMidi(msg: number[]): void {

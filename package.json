@@ -1,6 +1,6 @@
 {
   "name": "01v96-studio",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "description": "Yamaha 01V96 VCM Studio Remote & Channel Strip Controller (Direct USB & WebSocket)",
   "type": "module",

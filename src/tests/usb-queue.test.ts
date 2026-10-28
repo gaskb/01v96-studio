@@ -30,4 +30,16 @@ describe('YamahaUsbTransport FIFO Queue & Error Paths (P1/P2)', () => {
 
     await expect(Promise.all([p1, p2, p3])).resolves.toHaveLength(3);
   });
+
+  it('manages high and low priority queues and clears low priority cleanly', async () => {
+    const transport = new YamahaUsbTransport();
+
+    // High and low priority sendSysEx resolve cleanly
+    const h1 = transport.sendSysEx([0xf0, 0x43, 0x10, 0xf7], 'high');
+    const l1 = transport.sendSysEx([0xf0, 0x43, 0x10, 0xf7], 'low');
+    transport.clearLowPriorityQueue();
+
+    await expect(Promise.all([h1, l1])).resolves.toBeDefined();
+    expect(transport.getLowQueueLength()).toBe(0);
+  });
 });

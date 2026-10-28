@@ -113,9 +113,10 @@ export class YamahaUsbTransport {
   private connected = false;
   private onMessageCallback: ((msg: number[]) => void) | null = null;
   private onStatusChangeCallback: ((connected: boolean) => void) | null = null;
-  private sendQueue: Array<{ chunks: Buffer[]; resolve: () => void }> = [];
+  private highQueue: Array<{ chunks: Buffer[]; resolve: () => void }> = [];
+  private lowQueue: Array<{ chunks: Buffer[]; resolve: () => void }> = [];
   private isProcessingQueue = false;
-  private readonly PACING_MS = 2;
+  private readonly PACING_MS = 1;
 
   onMessage(cb: (msg: number[]) => void): void {
     this.onMessageCallback = cb;
@@ -198,10 +199,24 @@ export class YamahaUsbTransport {
   }
 
   getQueueLength(): number {
-    return this.sendQueue.length;
+    return this.highQueue.length + this.lowQueue.length;
   }
 
-  sendSysEx(sysex: number[]): Promise<void> {
+  getHighQueueLength(): number {
+    return this.highQueue.length;
+  }
+
+  getLowQueueLength(): number {
+    return this.lowQueue.length;
+  }
+
+  clearLowPriorityQueue(): void {
+    while (this.lowQueue.length > 0) {
+      this.lowQueue.shift()?.resolve();
+    }
+  }
+
+  sendSysEx(sysex: number[], priority: 'high' | 'low' = 'high'): Promise<void> {
     return new Promise((resolve) => {
       if (!this.connected || !this.outEndpoint) {
         resolve();
@@ -213,7 +228,11 @@ export class YamahaUsbTransport {
       for (let i = 0; i < packet.length; i += 64) {
         chunks.push(packet.subarray(i, i + 64));
       }
-      this.sendQueue.push({ chunks, resolve });
+      if (priority === 'high') {
+        this.highQueue.push({ chunks, resolve });
+      } else {
+        this.lowQueue.push({ chunks, resolve });
+      }
       this.processQueue();
     });
   }
@@ -222,8 +241,9 @@ export class YamahaUsbTransport {
     if (this.isProcessingQueue) return;
     this.isProcessingQueue = true;
 
-    while (this.sendQueue.length > 0) {
-      const item = this.sendQueue.shift();
+    while (this.highQueue.length > 0 || this.lowQueue.length > 0) {
+      // High priority always processed first
+      const item = this.highQueue.length > 0 ? this.highQueue.shift() : this.lowQueue.shift();
       if (!item) break;
 
       if (!this.connected || !this.outEndpoint) {
@@ -246,7 +266,8 @@ export class YamahaUsbTransport {
 
       item.resolve();
 
-      if (this.PACING_MS > 0 && this.sendQueue.length > 0) {
+      const totalRemaining = this.highQueue.length + this.lowQueue.length;
+      if (this.PACING_MS > 0 && totalRemaining > 0) {
         await new Promise((r) => setTimeout(r, this.PACING_MS));
       }
     }
@@ -269,8 +290,11 @@ export class YamahaUsbTransport {
   }
 
   private cleanupDevice(): void {
-    while (this.sendQueue.length > 0) {
-      this.sendQueue.shift()?.resolve();
+    while (this.highQueue.length > 0) {
+      this.highQueue.shift()?.resolve();
+    }
+    while (this.lowQueue.length > 0) {
+      this.lowQueue.shift()?.resolve();
     }
     this.isProcessingQueue = false;
 
