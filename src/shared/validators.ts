@@ -220,3 +220,76 @@ export function validateClientCommand(
   }
   return { success: true, data: result.data };
 }
+
+export const SceneBackupDataSchema = z.object({
+  number: z.number().int().min(0).max(99),
+  title: z.string().max(64),
+  channels: z.array(z.any()),
+  auxes: z.array(z.any()),
+  buses: z.array(z.any()),
+  stereo: z.any(),
+  effects: z.array(z.any()).optional(),
+  labels: z
+    .object({
+      ch: z.record(z.string(), z.string()).optional(),
+      aux: z.record(z.string(), z.string()).optional(),
+      bus: z.record(z.string(), z.string()).optional(),
+    })
+    .optional(),
+});
+
+export const MixerBackupPackageSchema = z.object({
+  format: z.literal('01v96-studio-backup'),
+  version: z.string(),
+  timestamp: z.string(),
+  appVersion: z.string().optional(),
+  uiVersion: z.string().optional(),
+  apiVersion: z.string().optional(),
+  metadata: z
+    .object({
+      name: z.string().optional(),
+      author: z.string().optional(),
+      description: z.string().optional(),
+    })
+    .optional(),
+  global: z
+    .object({
+      layouts: z.any().optional(),
+      activeLayer: z.number().int().min(0).max(5).optional(),
+      dualChannelView: z.boolean().optional(),
+      deepPair: z.boolean().optional(),
+    })
+    .optional(),
+  scenes: z.record(z.string(), SceneBackupDataSchema),
+});
+
+export const RestorePlanSchema = z.object({
+  restoreGlobal: z.boolean().optional(),
+  writeHardware: z.boolean().optional(),
+  scenes: z.array(
+    z.object({
+      sourceSceneNumber: z.number().int().min(0).max(99),
+      targetSceneNumber: z.number().int().min(0).max(99),
+    })
+  ),
+});
+
+export const RestoreRequestSchema = z.object({
+  package: MixerBackupPackageSchema,
+  plan: RestorePlanSchema,
+});
+
+import type { RestoreRequest } from './types.js';
+
+export function validateRestoreRequest(
+  raw: unknown
+): { success: true; data: RestoreRequest } | { success: false; error: string } {
+  const result = RestoreRequestSchema.safeParse(raw);
+  if (!result.success) {
+    const errorMsg = result.error.errors
+      .map((e) => `${e.path.join('.') || 'root'}: ${e.message}`)
+      .join(', ');
+    return { success: false, error: errorMsg };
+  }
+  return { success: true, data: result.data as unknown as RestoreRequest };
+}

@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.5.7';
-export const UI_VERSION = '0.5.7';
-export const API_VERSION = '0.5.7';
+export const APP_VERSION = '0.6.0';
+export const UI_VERSION = '0.6.0';
+export const API_VERSION = '0.6.0';
 
 export type ControlMode = 'knobs' | 'sliders';
 
@@ -175,4 +175,65 @@ export interface ChannelLayoutConfig {
 export interface LayoutStorageData {
   activeLayout?: ChannelLayoutConfig;
   presets: ChannelLayoutConfig[];
+}
+
+export interface SceneBackupLabels {
+  ch?: Record<string | number, string>;
+  aux?: Record<string | number, string>;
+  bus?: Record<string | number, string>;
+}
+
+export interface SceneBackupData {
+  number: number;
+  title: string;
+  channels: InputChannelState[];
+  auxes: OutputChannelState[];
+  buses: OutputChannelState[];
+  stereo?: OutputChannelState;
+  effects?: EffectRackState[];
+  labels?: SceneBackupLabels;
+}
+
+export interface MixerBackupPackage {
+  format: '01v96-studio-backup';
+  version: string;
+  timestamp: string;
+  appVersion?: string;
+  uiVersion?: string;
+  apiVersion?: string;
+  metadata?: {
+    name?: string;
+    author?: string;
+    description?: string;
+  };
+  global?: {
+    layouts?: LayoutStorageData;
+    activeLayer?: number;
+    dualChannelView?: boolean;
+    deepPair?: boolean;
+  };
+  scenes: Record<string, SceneBackupData>;
+}
+
+export interface RestoreSceneItem {
+  sourceSceneNumber: number;
+  targetSceneNumber: number;
+}
+
+export interface RestorePlan {
+  restoreGlobal?: boolean;
+  writeHardware?: boolean;
+  scenes: RestoreSceneItem[];
+}
+
+export interface RestoreRequest {
+  package: MixerBackupPackage;
+  plan: RestorePlan;
+}
+
+export interface RestoreResult {
+  ok: boolean;
+  restoredScenes: number[];
+  restoredGlobal: boolean;
+  message?: string;
 }

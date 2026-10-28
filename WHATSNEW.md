@@ -9,6 +9,16 @@
 
 All notable changes to **01V96 Studio** are documented here in reverse chronological order.
 
+### [v0.6.0] - 2026-10-28
+- **Added**:
+  - Comprehensive Mixer Show Backup & Restore System:
+    - Selective or full export of mixer scenes, custom labels, modular layouts, and console settings into a clean, portable `.json` file.
+    - Interactive restore wizard with flexible scene-by-scene selection and slot remapping (e.g. restore scene #01 from file into slot #05 on the console).
+    - REST API endpoints: `GET /api/scenes`, `GET /api/backup`, and `POST /api/backup/restore` with strict Zod validation schema.
+    - Persistent server-side scene archiving (`data/scenes-archive.json`) automatically capturing full mixer states on scene store.
+    - Upgraded Scene Memory modal (`SceneModal.tsx`) with three dedicated tabs: Scene Memory (Recall/Store), Export Backup, and Restore Backup.
+  - Automatic GitHub Actions CI pipeline and status badge.
+
 ### [v0.5.7] - 2026-10-28
 - **Added**:
   - Direct numeric value input: clicking numerical labels on rotary knobs (`RotaryKnob.tsx`) and fader strips (`FaderStrip.tsx`) opens an inline input field with instant validation and range clamping (supporting dB notation such as `+6.0 dB`, `-inf`, or raw numeric levels).
@@ -56,6 +66,16 @@ All notable changes to **01V96 Studio** are documented here in reverse chronolog
 ## Italiano
 
 Tutte le modifiche rilevanti apportate a **01V96 Studio** sono documentate qui in ordine cronologico inverso.
+
+### [v0.6.0] - 2026-10-28
+- **Novità (Added)**:
+  - Sistema completo di Backup e Ripristino Show/Progetti del Mixer:
+    - Esportazione selettiva o totale di scene del mixer, etichette personalizzate, layout modulari e preferenze della console in un unico file `.json` portabile.
+    - Wizard interattivo di ripristino con selezione scena per scena e rimappatura libera degli slot di destinazione (es. ripristina la scena #01 del file nello slot #05 del mixer).
+    - Endpoint REST dedicati: `GET /api/scenes`, `GET /api/backup` e `POST /api/backup/restore` con validazione rigorosa Zod.
+    - Archiviazione persistente lato server delle scene (`data/scenes-archive.json`) che cattura automaticamente lo stato completo del mixer al salvataggio scena.
+    - Modale memorie scena aggiornata (`SceneModal.tsx`) con 3 tab dedicate: Memorie Scena (Recall/Store), Esporta Backup e Ripristina Backup.
+  - Pipeline automatica di Continuous Integration su GitHub Actions con badge di stato.
 
 ### [v0.5.7] - 2026-10-28
 - **Novità (Added)**:

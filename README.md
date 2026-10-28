@@ -47,6 +47,9 @@ Modern Web Remote Controller & Channel Strip Interface for **Yamaha 01V96 / 01V9
   - Scene Recall (0–99) and Store with safety confirmation dialogs.
   - Scene Compare mode to audit live changes against saved scene parameters.
   - Safety confirmation modal before running Demo Wave on real motorized faders.
+- **Show Backup & Restore**:
+  - Full or selective export of scenes, custom channel/aux/bus names, and modular layouts into portable JSON show packages.
+  - Interactive restore wizard allowing selective scene restoration and slot remapping (e.g. restore scene #01 from file into slot #05 on the console).
 
 ---
 
@@ -207,6 +210,9 @@ Custom channel and scene labels will be automatically preserved in `./data/scene
 - `GET /api/status`: Returns mixer connection status, connection mode (`usb-direct` or `simulated`), current scene, and active layer.
 - `GET /api/state`: Returns the full in-memory mixer state snapshot.
 - `POST /api/command`: Dispatches a validated `ClientCommand` (Zod schema verified).
+- `GET /api/scenes`: Returns list of available scenes with titles and archive metadata.
+- `GET /api/backup`: Exports a portable `MixerBackupPackage` with selective scene filtering and global layouts (`?scenes=1,2&includeGlobal=true&download=true`).
+- `POST /api/backup/restore`: Restores scenes with customizable target slot remapping and Zod schema validation.
 - `GET /api/scene-labels`: Returns all custom labels indexed by scene number.
 - `POST /api/scene-labels`: Updates custom labels for a given scene.
 
@@ -260,6 +266,9 @@ Interfaccia di controllo remoto web e channel strip per mixer digitali **Yamaha 
   - Richiamo e salvataggio memorie scena (0–99) con finestre di dialogo di conferma per evitare sovrascritture accidentali.
   - Modalità Scene Compare per confrontare i parametri attuali con quelli salvati nella memoria.
   - Finestra di conferma di sicurezza prima di avviare il movimento motorizzato della funzione Demo Wave sui fader reali.
+- **Backup & Ripristino Show File**:
+  - Esportazione selettiva o totale di scene del mixer, etichette personalizzate e layout in file JSON compatti e portabili.
+  - Wizard interattivo di ripristino che consente la selezione scena per scena e la rimappatura libera degli slot di destinazione (es. ripristina la scena #01 del file nello slot #05 del mixer).
 
 ---
 
@@ -420,6 +429,9 @@ I dati persistenti delle etichette e della configurazione saranno salvati nella 
 - `GET /api/status`: Restituisce lo stato di connessione al mixer, modalità (`usb-direct` o `simulated`), scena corrente e layer attivo.
 - `GET /api/state`: Restituisce l'intero stato in memoria del mixer.
 - `POST /api/command`: Invia un comando validato con schema Zod.
+- `GET /api/scenes`: Restituisce l'elenco delle scene disponibili con titoli e metadati di archivio.
+- `GET /api/backup`: Esporta un pacchetto portabile `MixerBackupPackage` con filtro selettivo scene e layout globali (`?scenes=1,2&includeGlobal=true&download=true`).
+- `POST /api/backup/restore`: Ripristina le scene con rimappatura degli slot di destinazione e validazione dello schema Zod.
 - `GET /api/scene-labels`: Restituisce tutte le etichette personalizzate indicizzate per scena.
 - `POST /api/scene-labels`: Aggiorna le etichette di una scena.
 

@@ -1,12 +1,24 @@
-import { ClientCommand, MixerState } from '../shared/types.js';
+import {
+  API_VERSION,
+  APP_VERSION,
+  ClientCommand,
+  MixerBackupPackage,
+  MixerState,
+  RestoreRequest,
+  RestoreResult,
+  SceneBackupData,
+  UI_VERSION,
+} from '../shared/types.js';
 import { dispatchClientCommand } from './command-dispatcher.js';
 import { createInitialMixerState } from './default-state.js';
 import { computePostDspMeter } from './dsp-meter-simulator.js';
+import { LayoutStorage } from './layout-storage.js';
 import {
   buildMeterRequest,
   buildOutputMeterRequest,
   buildParamChange,
   buildParamRequest,
+  buildSceneStoreSysEx,
   COMP_PARAM_MAP,
   EL_AUX_FADER,
   EL_AUX_ON,
@@ -31,6 +43,7 @@ import {
   MODEL_01V96,
   MODEL_UNIVERSAL,
 } from './protocol.js';
+import { SceneArchiveStorage } from './scene-archive-storage.js';
 import { SceneLabelsStorage } from './scene-labels-storage.js';
 import { handleIncomingMidi } from './sysex-inbound-handler.js';
 import { YamahaUsbTransport } from './usb-transport.js';
@@ -52,6 +65,7 @@ export class MixerController {
   private effectTitleChars: Map<number, string[]> = new Map();
   private channelNameChars: Map<number, string[]> = new Map();
   private labelsStorage: SceneLabelsStorage;
+  public archiveStorage: SceneArchiveStorage;
   private isSyncing = false;
   private pendingSceneResync = false;
   private syncSessionId = 0;
@@ -61,6 +75,7 @@ export class MixerController {
     this.transport = new YamahaUsbTransport();
     this.state = createInitialMixerState();
     this.labelsStorage = new SceneLabelsStorage();
+    this.archiveStorage = new SceneArchiveStorage();
 
     for (let i = 0; i < 32; i++) {
       this.channelNameChars.set(i, (`CH${i + 1}    `).slice(0, 4).split(''));
@@ -311,6 +326,7 @@ export class MixerController {
       transport: this.transport,
       dirtyParams: this.dirtyParams,
       labelsStorage: this.labelsStorage,
+      archiveStorage: this.archiveStorage,
       broadcastChannelUpdate: (target, id, changes) =>
         this.broadcastChannelUpdate(target, id, changes),
       broadcastPatch: (patch) => this.broadcastPatch(patch),
@@ -419,5 +435,212 @@ export class MixerController {
 
   private delay(ms: number): Promise<void> {
     return new Promise((r) => setTimeout(r, ms));
+  }
+
+  public getSceneList(): Array<{
+    sceneNumber: number;
+    title: string;
+    hasArchive: boolean;
+    hasLabels: boolean;
+    isCurrent: boolean;
+  }> {
+    const list: Array<{
+      sceneNumber: number;
+      title: string;
+      hasArchive: boolean;
+      hasLabels: boolean;
+      isCurrent: boolean;
+    }> = [];
+    const allArchived = this.archiveStorage.getAllScenes();
+
+    for (let i = 0; i <= 99; i++) {
+      const isCurrent = i === this.state.sceneNumber;
+      const archived = allArchived[String(i)];
+      const labels = this.labelsStorage.get(i);
+      const title = isCurrent
+        ? this.state.sceneTitle
+        : archived?.title || (i === 0 ? 'Initial Data' : `Scene #${String(i).padStart(2, '0')}`);
+
+      if (isCurrent || archived || labels) {
+        list.push({
+          sceneNumber: i,
+          title,
+          hasArchive: !!archived,
+          hasLabels: !!labels,
+          isCurrent,
+        });
+      }
+    }
+    return list;
+  }
+
+  public exportBackup(
+    sceneNumbers?: number[],
+    includeGlobal = true,
+    metadata?: { name?: string; author?: string; description?: string }
+  ): MixerBackupPackage {
+    const scenesToExport: Record<string, SceneBackupData> = {};
+    const allArchived = this.archiveStorage.getAllScenes();
+
+    let targetNumbers: number[] = [];
+    if (sceneNumbers && sceneNumbers.length > 0) {
+      targetNumbers = sceneNumbers;
+    } else {
+      const numSet = new Set<number>();
+      for (const k of Object.keys(allArchived)) numSet.add(Number(k));
+      numSet.add(this.state.sceneNumber);
+      targetNumbers = Array.from(numSet).sort((a, b) => a - b);
+    }
+
+    for (const num of targetNumbers) {
+      if (num === this.state.sceneNumber) {
+        const chMap: Record<number, string> = {};
+        for (const c of this.state.channels) chMap[c.id] = c.name;
+        const auxMap: Record<number, string> = {};
+        for (const a of this.state.auxes) auxMap[a.id] = a.name;
+        const busMap: Record<number, string> = {};
+        for (const b of this.state.buses) busMap[b.id] = b.name;
+
+        scenesToExport[String(num)] = {
+          number: num,
+          title: this.state.sceneTitle,
+          channels: structuredClone(this.state.channels),
+          auxes: structuredClone(this.state.auxes),
+          buses: structuredClone(this.state.buses),
+          stereo: structuredClone(this.state.stereo),
+          effects: structuredClone(this.state.effects),
+          labels: { ch: chMap, aux: auxMap, bus: busMap },
+        };
+      } else if (allArchived[String(num)]) {
+        scenesToExport[String(num)] = structuredClone(allArchived[String(num)]);
+      } else {
+        const labels = this.labelsStorage.get(num);
+        if (labels) {
+          scenesToExport[String(num)] = {
+            number: num,
+            title: `Scene #${String(num).padStart(2, '0')}`,
+            channels: structuredClone(this.state.channels),
+            auxes: structuredClone(this.state.auxes),
+            buses: structuredClone(this.state.buses),
+            stereo: structuredClone(this.state.stereo),
+            effects: structuredClone(this.state.effects),
+            labels: structuredClone(labels),
+          };
+        }
+      }
+    }
+
+    return {
+      format: '01v96-studio-backup',
+      version: '1.0',
+      timestamp: new Date().toISOString(),
+      appVersion: APP_VERSION,
+      uiVersion: UI_VERSION,
+      apiVersion: API_VERSION,
+      metadata: metadata || {
+        name: `01V96 Studio Backup`,
+        description: `Exported ${Object.keys(scenesToExport).length} scene(s)`,
+      },
+      global: includeGlobal
+        ? {
+            activeLayer: this.state.activeLayer,
+            dualChannelView: this.state.dualChannelView,
+            deepPair: this.state.deepPair,
+          }
+        : undefined,
+      scenes: scenesToExport,
+    };
+  }
+
+  public async restoreBackup(
+    req: RestoreRequest,
+    layoutStorage?: LayoutStorage
+  ): Promise<RestoreResult> {
+    const restoredScenes: number[] = [];
+    let restoredGlobal = false;
+
+    // 1. Restore global layouts & flags
+    if (req.plan.restoreGlobal && req.package.global) {
+      if (req.package.global.layouts && layoutStorage) {
+        if (req.package.global.layouts.activeLayout) {
+          layoutStorage.setActiveLayout(req.package.global.layouts.activeLayout);
+        }
+        if (req.package.global.layouts.presets) {
+          for (const p of req.package.global.layouts.presets) {
+            layoutStorage.savePreset(p);
+          }
+        }
+      }
+      if (req.package.global.activeLayer !== undefined) {
+        this.state.activeLayer = req.package.global.activeLayer;
+      }
+      if (req.package.global.deepPair !== undefined) {
+        this.state.deepPair = req.package.global.deepPair;
+      }
+      restoredGlobal = true;
+    }
+
+    // 2. Restore scenes according to the plan
+    for (const item of req.plan.scenes) {
+      const srcKey = String(item.sourceSceneNumber);
+      const sceneData = req.package.scenes[srcKey];
+      if (!sceneData) continue;
+
+      const targetNum = item.targetSceneNumber;
+
+      const clonedScene: SceneBackupData = {
+        ...structuredClone(sceneData),
+        number: targetNum,
+      };
+      this.archiveStorage.archiveScene(targetNum, clonedScene);
+
+      if (sceneData.labels) {
+        this.labelsStorage.snapshotScene(targetNum, sceneData.labels);
+      }
+
+      if (targetNum === this.state.sceneNumber) {
+        this.state.sceneTitle = sceneData.title || `Scene #${targetNum}`;
+        if (sceneData.channels) this.state.channels = structuredClone(sceneData.channels);
+        if (sceneData.auxes) this.state.auxes = structuredClone(sceneData.auxes);
+        if (sceneData.buses) this.state.buses = structuredClone(sceneData.buses);
+        if (sceneData.stereo) this.state.stereo = structuredClone(sceneData.stereo);
+        if (sceneData.effects) this.state.effects = structuredClone(sceneData.effects);
+        this.applySceneLabels(targetNum);
+
+        if (this.transport.isConnected() && req.plan.writeHardware !== false) {
+          await this.sendFullStateToHardware();
+          await this.transport.sendSysEx(buildSceneStoreSysEx(targetNum));
+        }
+      }
+
+      restoredScenes.push(targetNum);
+    }
+
+    this.broadcastState();
+
+    return {
+      ok: true,
+      restoredScenes,
+      restoredGlobal,
+      message: `Successfully restored ${restoredScenes.length} scene(s)${restoredGlobal ? ' and global settings' : ''}.`,
+    };
+  }
+
+  private async sendFullStateToHardware(): Promise<void> {
+    if (!this.transport.isConnected()) return;
+    for (const ch of this.state.channels) {
+      await this.transport.sendSysEx(
+        buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch.id - 1, ch.fader),
+        'high'
+      );
+      await this.transport.sendSysEx(
+        buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch.id - 1, ch.on ? 1 : 0),
+        'high'
+      );
+      await this.transport.sendSysEx(
+        buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAN, 0, ch.id - 1, ch.pan),
+        'high'
+      );
+    }
   }
 }

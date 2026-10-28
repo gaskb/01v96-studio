@@ -39,6 +39,7 @@ import {
   MODEL_01V96,
   MODEL_UNIVERSAL,
 } from './protocol.js';
+import { SceneArchiveStorage } from './scene-archive-storage.js';
 import { SceneLabelsStorage } from './scene-labels-storage.js';
 import { YamahaUsbTransport } from './usb-transport.js';
 
@@ -47,6 +48,7 @@ export interface CommandDispatcherContext {
   transport: YamahaUsbTransport;
   dirtyParams: Set<string>;
   labelsStorage: SceneLabelsStorage;
+  archiveStorage?: SceneArchiveStorage;
   broadcastChannelUpdate: (
     target: 'ch' | 'aux' | 'bus' | 'stereo',
     id: number,
@@ -610,6 +612,20 @@ export async function dispatchClientCommand(
       for (const b of ctx.state.buses) busMap[b.id] = b.name;
 
       ctx.labelsStorage.snapshotScene(pgm, { ch: chMap, aux: auxMap, bus: busMap });
+
+      if (ctx.archiveStorage) {
+        ctx.archiveStorage.archiveScene(pgm, {
+          number: pgm,
+          title: ctx.state.sceneTitle,
+          channels: structuredClone(ctx.state.channels),
+          auxes: structuredClone(ctx.state.auxes),
+          buses: structuredClone(ctx.state.buses),
+          stereo: structuredClone(ctx.state.stereo),
+          effects: structuredClone(ctx.state.effects),
+          labels: { ch: chMap, aux: auxMap, bus: busMap },
+        });
+      }
+
       ctx.broadcastState();
       break;
     }
