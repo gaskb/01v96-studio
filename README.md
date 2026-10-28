@@ -3,10 +3,12 @@
 [English](#english) | [Italiano](#italiano)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/gaskb/01v96-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/gaskb/01v96-studio/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](Dockerfile)
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-gaskb%2F01v96--studio-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/gaskb/01v96-studio)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-orange?style=flat&logo=kofi)](https://ko-fi.com/gaskb)
 
 ---
