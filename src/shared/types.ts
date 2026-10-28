@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.5.5';
-export const UI_VERSION = '0.5.5';
-export const API_VERSION = '0.5.3';
+export const APP_VERSION = '0.5.6';
+export const UI_VERSION = '0.5.6';
+export const API_VERSION = '0.5.4';
 
 export type ControlMode = 'knobs' | 'sliders';
 
@@ -140,6 +140,7 @@ export interface MixerState {
   sceneModified: boolean;
   selectedChannel: number; // 1..32
   dualChannelView: boolean; // Single vs Dual/Stereo Pair Channel View
+  deepPair: boolean;       // Sync EQ, dynamics, and strip params across paired channels
   activeLayer: number;     // 0 = 1-16, 1 = 17-32, 2 = Master/AUX/BUS, 3 = Remote
   demoWaveActive: boolean;
   channels: InputChannelState[];  // 32 input channels
@@ -169,6 +170,7 @@ export type ClientCommand =
   | { type: 'set_delay'; id: number; on: boolean; time: number }
   | { type: 'select_channel'; id: number }
   | { type: 'set_dual_view'; enabled: boolean }
+  | { type: 'set_deep_pair'; enabled: boolean }
   | { type: 'recall_scene'; sceneNumber: number }
   | { type: 'store_scene'; sceneNumber: number; title?: string }
   | { type: 'set_effect'; rackId: number; param: 'bypass' | 'mix' | 'type' | 'param1' | 'param2' | 'param3' | 'param4'; value: number | boolean }

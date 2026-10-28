@@ -15,6 +15,7 @@ export interface ChannelStripPanelProps {
   sendCommand: (cmd: ClientCommand) => void;
   auxNames?: string[];
   busNames?: string[];
+  deepPair?: boolean;
 }
 
 export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
@@ -25,6 +26,7 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
   sendCommand,
   auxNames,
   busNames,
+  deepPair = false,
 }) => {
   const [activeTab, setActiveTab] = useState<ChannelStripTabId>('eq');
 
@@ -39,6 +41,7 @@ export const ChannelStripPanel: React.FC<ChannelStripPanelProps> = ({
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         sendCommand={sendCommand}
+        deepPair={deepPair}
       />
 
       {/* TAB 1: 4-Band Parametric EQ */}

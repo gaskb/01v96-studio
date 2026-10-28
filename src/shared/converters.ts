@@ -75,3 +75,17 @@ export function formatPan(pan: number): string {
   if (pan < 0) return `L${Math.abs(pan)}`;
   return `R${pan}`;
 }
+
+/**
+ * Get partner channel index (0..31) for Yamaha 01V96 adjacent stereo pairs (1-2, 3-4, etc.)
+ */
+export function getPairedChannelIndex(channelIndex: number): number {
+  return channelIndex % 2 === 0 ? channelIndex + 1 : channelIndex - 1;
+}
+
+/**
+ * Get partner channel ID (1..32) for Yamaha 01V96 adjacent stereo pairs (1-2, 3-4, etc.)
+ */
+export function getPairedChannelId(channelId: number): number {
+  return channelId % 2 === 1 ? channelId + 1 : channelId - 1;
+}

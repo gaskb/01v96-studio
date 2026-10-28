@@ -43,6 +43,7 @@ const FullChannelColumn: React.FC<{
   dragOverId: string | null;
   auxNames?: string[];
   busNames?: string[];
+  deepPair?: boolean;
   onUpdateItem: (updated: WidgetLayoutItem) => void;
   onDropOnCell: (id: string, col: number, row: number) => void;
   onDropOnWidget: (targetId: string, e: React.DragEvent) => void;
@@ -63,6 +64,7 @@ const FullChannelColumn: React.FC<{
   dragOverId,
   auxNames,
   busNames,
+  deepPair = false,
   onUpdateItem,
   onDropOnCell,
   onDropOnWidget,
@@ -130,6 +132,25 @@ const FullChannelColumn: React.FC<{
         >
           🔗 PAIR {ch.pair ? 'ON' : 'OFF'}
         </button>
+
+        {ch.pair && (
+          <label
+            title="Deep Pair: sincronizza EQ, Dinamiche e Parametri con il canale in coppia"
+            className={`w-full py-1 px-1 rounded text-[9px] font-mono font-bold border cursor-pointer transition select-none flex items-center justify-center gap-1.5 ${
+              deepPair
+                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(deepPair)}
+              onChange={(e) => sendCommand({ type: 'set_deep_pair', enabled: e.target.checked })}
+              className="w-3 h-3 accent-cyan-400 cursor-pointer rounded"
+            />
+            <span>DEEP PAIR</span>
+          </label>
+        )}
       </div>
 
       {/* Right Column: Dynamic Modular Grid */}
@@ -518,6 +539,24 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             >
               👥 COPPIA ({baseOddId} & {baseOddId + 1})
             </button>
+
+            {/* Deep Pair Toggle */}
+            <label
+              title="Deep Pair: quando attivo, tutte le modifiche su EQ, Dinamiche e Parametri si riflettono automaticamente sul canale in coppia"
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-mono font-bold border cursor-pointer transition select-none ml-1 ${
+                state.deepPair
+                  ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_10px_rgba(6,182,212,0.25)]'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(state.deepPair)}
+                onChange={(e) => sendCommand({ type: 'set_deep_pair', enabled: e.target.checked })}
+                className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer rounded"
+              />
+              <span>DEEP PAIR</span>
+            </label>
           </div>
         </div>
       </div>
@@ -551,6 +590,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             dragOverId={dragOverId}
             auxNames={state.auxes.map((a) => a.name)}
             busNames={state.buses.map((b) => b.name)}
+            deepPair={state.deepPair}
             onUpdateItem={handleUpdateItem}
             onDropOnCell={handleDropOnCell}
             onDropOnWidget={handleDropOnWidget}
@@ -574,6 +614,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               dragOverId={dragOverId}
               auxNames={state.auxes.map((a) => a.name)}
               busNames={state.buses.map((b) => b.name)}
+              deepPair={state.deepPair}
               onUpdateItem={handleUpdateItem}
               onDropOnCell={handleDropOnCell}
               onDropOnWidget={handleDropOnWidget}
@@ -595,6 +636,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               dragOverId={dragOverId}
               auxNames={state.auxes.map((a) => a.name)}
               busNames={state.buses.map((b) => b.name)}
+              deepPair={state.deepPair}
               onUpdateItem={handleUpdateItem}
               onDropOnCell={handleDropOnCell}
               onDropOnWidget={handleDropOnWidget}

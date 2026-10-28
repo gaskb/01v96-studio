@@ -174,6 +174,7 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
             sendCommand={sendCommand}
             auxNames={state.auxes.map((a) => a.name)}
             busNames={state.buses.map((b) => b.name)}
+            deepPair={state.deepPair}
           />
         </div>
       )}

@@ -1,4 +1,5 @@
 import { ClientCommand, MixerState } from '../shared/types.js';
+import { getPairedChannelIndex } from '../shared/converters.js';
 import { applyCompParam, applyEQParam, applyGateParam } from './param-helpers.js';
 import {
   buildParamChange,
@@ -82,6 +83,16 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch, val)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { fader: val });
+
+        if (ctx.state.channels[ch].pair) {
+          const partnerIdx = getPairedChannelIndex(ch);
+          if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+            const partnerId = partnerIdx + 1;
+            ctx.dirtyParams.add(`ch${partnerId}:fader`);
+            ctx.state.channels[partnerIdx].fader = val;
+            ctx.broadcastChannelUpdate('ch', partnerId, { fader: val });
+          }
+        }
       } else if (cmd.target === 'aux' && ctx.state.auxes[ch]) {
         ctx.state.auxes[ch].fader = val;
         await ctx.transport.sendSysEx(
@@ -113,6 +124,15 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch, numVal)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { on: cmd.value });
+
+        if (ctx.state.channels[ch].pair) {
+          const partnerIdx = getPairedChannelIndex(ch);
+          if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+            const partnerId = partnerIdx + 1;
+            ctx.state.channels[partnerIdx].on = cmd.value;
+            ctx.broadcastChannelUpdate('ch', partnerId, { on: cmd.value });
+          }
+        }
       } else if (cmd.target === 'aux' && ctx.state.auxes[ch]) {
         ctx.state.auxes[ch].on = cmd.value;
         await ctx.transport.sendSysEx(
@@ -187,6 +207,18 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PHASE, 0, ch, cmd.value ? 1 : 0)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { phase: cmd.value });
+
+        if (ctx.state.deepPair && ctx.state.channels[ch].pair) {
+          const partnerIdx = getPairedChannelIndex(ch);
+          if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+            const partnerId = partnerIdx + 1;
+            ctx.state.channels[partnerIdx].phase = cmd.value;
+            await ctx.transport.sendSysEx(
+              buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PHASE, 0, partnerIdx, cmd.value ? 1 : 0)
+            );
+            ctx.broadcastChannelUpdate('ch', partnerId, { phase: cmd.value });
+          }
+        }
       }
       break;
     }
@@ -201,6 +233,19 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, ch, val)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { att: val });
+
+        if (ctx.state.deepPair && ctx.state.channels[ch].pair) {
+          const partnerIdx = getPairedChannelIndex(ch);
+          if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+            const partnerId = partnerIdx + 1;
+            ctx.dirtyParams.add(`ch${partnerId}:att`);
+            ctx.state.channels[partnerIdx].att = val;
+            await ctx.transport.sendSysEx(
+              buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, partnerIdx, val)
+            );
+            ctx.broadcastChannelUpdate('ch', partnerId, { att: val });
+          }
+        }
       }
       break;
     }
@@ -213,6 +258,13 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAIR, 0, ch, cmd.value ? 1 : 0)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { pair: cmd.value });
+
+        const partnerIdx = getPairedChannelIndex(ch);
+        if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+          const partnerId = partnerIdx + 1;
+          ctx.state.channels[partnerIdx].pair = cmd.value;
+          ctx.broadcastChannelUpdate('ch', partnerId, { pair: cmd.value });
+        }
       }
       break;
     }
@@ -260,6 +312,19 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, paramIdx, ch, numVal)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { eq: ctx.state.channels[ch].eq });
+
+        if (ctx.state.deepPair && ctx.state.channels[ch].pair) {
+          const partnerIdx = getPairedChannelIndex(ch);
+          if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+            const partnerId = partnerIdx + 1;
+            ctx.dirtyParams.add(`ch${partnerId}:eq:${cmd.param}`);
+            applyEQParam(ctx.state.channels[partnerIdx].eq, paramIdx, numVal);
+            await ctx.transport.sendSysEx(
+              buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_EQ, paramIdx, partnerIdx, numVal)
+            );
+            ctx.broadcastChannelUpdate('ch', partnerId, { eq: ctx.state.channels[partnerIdx].eq });
+          }
+        }
       } else if (cmd.target === 'aux' && ctx.state.auxes[ch]) {
         applyEQParam(ctx.state.auxes[ch].eq, paramIdx, numVal);
         await ctx.transport.sendSysEx(
@@ -293,6 +358,19 @@ export async function dispatchClientCommand(
         buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_GATE, paramIdx, ch, numVal)
       );
       ctx.broadcastChannelUpdate('ch', cmd.id, { gate: ctx.state.channels[ch].gate });
+
+      if (ctx.state.deepPair && ctx.state.channels[ch].pair) {
+        const partnerIdx = getPairedChannelIndex(ch);
+        if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+          const partnerId = partnerIdx + 1;
+          ctx.dirtyParams.add(`ch${partnerId}:gate:${cmd.param}`);
+          applyGateParam(ctx.state.channels[partnerIdx].gate, paramIdx, numVal);
+          await ctx.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_GATE, paramIdx, partnerIdx, numVal)
+          );
+          ctx.broadcastChannelUpdate('ch', partnerId, { gate: ctx.state.channels[partnerIdx].gate });
+        }
+      }
       break;
     }
 
@@ -309,6 +387,19 @@ export async function dispatchClientCommand(
           buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_COMP, paramIdx, ch, numVal)
         );
         ctx.broadcastChannelUpdate('ch', cmd.id, { comp: ctx.state.channels[ch].comp });
+
+        if (ctx.state.deepPair && ctx.state.channels[ch].pair) {
+          const partnerIdx = getPairedChannelIndex(ch);
+          if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+            const partnerId = partnerIdx + 1;
+            ctx.dirtyParams.add(`ch${partnerId}:comp:${cmd.param}`);
+            applyCompParam(ctx.state.channels[partnerIdx].comp, paramIdx, numVal);
+            await ctx.transport.sendSysEx(
+              buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_COMP, paramIdx, partnerIdx, numVal)
+            );
+            ctx.broadcastChannelUpdate('ch', partnerId, { comp: ctx.state.channels[partnerIdx].comp });
+          }
+        }
       } else if (cmd.target === 'stereo') {
         applyCompParam(ctx.state.stereo.comp, paramIdx, numVal);
         await ctx.transport.sendSysEx(
@@ -339,6 +430,25 @@ export async function dispatchClientCommand(
         buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, paramIdx, ch, numVal)
       );
       ctx.broadcastChannelUpdate('ch', cmd.id, { routing: chObj.routing });
+
+      if (ctx.state.deepPair && chObj.pair) {
+        const partnerIdx = getPairedChannelIndex(ch);
+        if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+          const partnerObj = ctx.state.channels[partnerIdx];
+          const partnerId = partnerIdx + 1;
+          if (cmd.target === 'stereo') {
+            partnerObj.routing.stereo = cmd.value;
+          } else if (cmd.target === 'direct') {
+            partnerObj.routing.direct = cmd.value;
+          } else if (cmd.target === 'bus' && cmd.busIndex !== undefined) {
+            partnerObj.routing.bus[cmd.busIndex] = cmd.value;
+          }
+          await ctx.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, paramIdx, partnerIdx, numVal)
+          );
+          ctx.broadcastChannelUpdate('ch', partnerId, { routing: partnerObj.routing });
+        }
+      }
       break;
     }
 
@@ -369,6 +479,26 @@ export async function dispatchClientCommand(
         buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, paramIdx, ch, numVal)
       );
       ctx.broadcastChannelUpdate('ch', cmd.chId, { auxSends: chObj.auxSends });
+
+      if (ctx.state.deepPair && chObj.pair) {
+        const partnerIdx = getPairedChannelIndex(ch);
+        if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+          const partnerObj = ctx.state.channels[partnerIdx];
+          const partnerId = partnerIdx + 1;
+          if (cmd.param === 'on') {
+            partnerObj.auxSends[auxIdx].on = Boolean(cmd.value);
+          } else if (cmd.param === 'pre') {
+            partnerObj.auxSends[auxIdx].pre = Boolean(cmd.value);
+          } else if (cmd.param === 'level') {
+            ctx.dirtyParams.add(`ch${partnerId}:aux:${cmd.auxId}:level`);
+            partnerObj.auxSends[auxIdx].level = numVal;
+          }
+          await ctx.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, paramIdx, partnerIdx, numVal)
+          );
+          ctx.broadcastChannelUpdate('ch', partnerId, { auxSends: partnerObj.auxSends });
+        }
+      }
       break;
     }
 
@@ -389,6 +519,33 @@ export async function dispatchClientCommand(
         delayOn: chObj.delayOn,
         delayTime: chObj.delayTime,
       });
+
+      if (ctx.state.deepPair && chObj.pair) {
+        const partnerIdx = getPairedChannelIndex(ch);
+        if (partnerIdx >= 0 && partnerIdx < 32 && ctx.state.channels[partnerIdx]) {
+          const partnerObj = ctx.state.channels[partnerIdx];
+          const partnerId = partnerIdx + 1;
+          ctx.dirtyParams.add(`ch${partnerId}:delayTime`);
+          partnerObj.delayOn = cmd.on;
+          partnerObj.delayTime = chObj.delayTime;
+          await ctx.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 0, partnerIdx, cmd.on ? 1 : 0)
+          );
+          await ctx.transport.sendSysEx(
+            buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 3, partnerIdx, partnerObj.delayTime)
+          );
+          ctx.broadcastChannelUpdate('ch', partnerId, {
+            delayOn: partnerObj.delayOn,
+            delayTime: partnerObj.delayTime,
+          });
+        }
+      }
+      break;
+    }
+
+    case 'set_deep_pair': {
+      ctx.state.deepPair = Boolean(cmd.enabled);
+      ctx.broadcastPatch({ deepPair: ctx.state.deepPair });
       break;
     }
 

@@ -14,6 +14,7 @@ interface ChannelStripHeaderProps {
   activeTab: ChannelStripTabId;
   onSelectTab: (tab: ChannelStripTabId) => void;
   sendCommand: (cmd: ClientCommand) => void;
+  deepPair?: boolean;
 }
 
 export const ChannelStripHeader: React.FC<ChannelStripHeaderProps> = ({
@@ -24,6 +25,7 @@ export const ChannelStripHeader: React.FC<ChannelStripHeaderProps> = ({
   activeTab,
   onSelectTab,
   sendCommand,
+  deepPair = false,
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(channel.name);
@@ -94,6 +96,26 @@ export const ChannelStripHeader: React.FC<ChannelStripHeaderProps> = ({
         >
           🔗 PAIR {channel.pair ? 'ON' : 'OFF'}
         </button>
+
+        {/* Deep Pair Toggle */}
+        {channel.pair && (
+          <label
+            title="Deep Pair: quando attivo, tutte le modifiche su EQ, Dinamiche e Parametri si riflettono automaticamente sul canale in coppia"
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-mono font-bold border cursor-pointer transition select-none ${
+              deepPair
+                ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_10px_rgba(6,182,212,0.25)]'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={Boolean(deepPair)}
+              onChange={(e) => sendCommand({ type: 'set_deep_pair', enabled: e.target.checked })}
+              className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer rounded"
+            />
+            <span>DEEP PAIR</span>
+          </label>
+        )}
 
         {/* Phase Normal/Reverse */}
         <button

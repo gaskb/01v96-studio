@@ -126,6 +126,7 @@ export function createInitialMixerState(): MixerState {
     sceneModified: false,
     selectedChannel: 1,
     dualChannelView: false,
+    deepPair: false,
     activeLayer: 0,
     demoWaveActive: false,
     channels: Array.from({ length: 32 }, (_, i) => createInputChannel(i + 1)),

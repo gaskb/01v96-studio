@@ -1,4 +1,5 @@
 import { MixerState } from '../shared/types.js';
+import { getPairedChannelIndex } from '../shared/converters.js';
 import { computePostDspMeter } from './dsp-meter-simulator.js';
 import {
   applyCompParam,
@@ -210,6 +211,18 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
               savedObj.fader = val;
             }
             ctx.broadcastChannelUpdate('ch', chId, { fader: val });
+
+            if (chObj.pair) {
+              const partnerIdx = getPairedChannelIndex(channel);
+              if (partnerIdx >= 0 && partnerIdx < 32) {
+                const partnerObj = ctx.state.channels[partnerIdx];
+                partnerObj.fader = val;
+                if (!ctx.dirtyParams.has(`ch${partnerIdx + 1}:fader`)) {
+                  ctx.state.savedChannels[partnerIdx].fader = val;
+                }
+                ctx.broadcastChannelUpdate('ch', partnerIdx + 1, { fader: val });
+              }
+            }
           }
           break;
         case EL_INPUT_ON:
@@ -219,6 +232,18 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
               savedObj.on = chObj.on;
             }
             ctx.broadcastChannelUpdate('ch', chId, { on: chObj.on });
+
+            if (chObj.pair) {
+              const partnerIdx = getPairedChannelIndex(channel);
+              if (partnerIdx >= 0 && partnerIdx < 32) {
+                const partnerObj = ctx.state.channels[partnerIdx];
+                partnerObj.on = chObj.on;
+                if (!ctx.dirtyParams.has(`ch${partnerIdx + 1}:on`)) {
+                  ctx.state.savedChannels[partnerIdx].on = chObj.on;
+                }
+                ctx.broadcastChannelUpdate('ch', partnerIdx + 1, { on: chObj.on });
+              }
+            }
           }
           break;
         case EL_INPUT_PAN:
@@ -250,8 +275,15 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
           break;
         case EL_INPUT_PAIR:
           if (param === 0) {
-            chObj.pair = val === 1;
-            ctx.broadcastChannelUpdate('ch', chId, { pair: chObj.pair });
+            const isPaired = val === 1;
+            chObj.pair = isPaired;
+            ctx.broadcastChannelUpdate('ch', chId, { pair: isPaired });
+
+            const partnerIdx = getPairedChannelIndex(channel);
+            if (partnerIdx >= 0 && partnerIdx < 32) {
+              ctx.state.channels[partnerIdx].pair = isPaired;
+              ctx.broadcastChannelUpdate('ch', partnerIdx + 1, { pair: isPaired });
+            }
           }
           break;
         case EL_INPUT_EQ: {

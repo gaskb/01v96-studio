@@ -180,6 +180,11 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
   }),
 
   z.object({
+    type: z.literal('set_deep_pair'),
+    enabled: z.boolean(),
+  }),
+
+  z.object({
     type: z.literal('trigger_demo_wave'),
     mode: z.enum(['sine', 'bounce', 'v-shape', 'stop']).optional(),
   }),

@@ -444,4 +444,146 @@ describe('Command Dispatcher Edge Cases & Environment Decoupling', () => {
       expect(ctx.state.geqs[0].bands.every((b) => b === 0)).toBe(true);
     });
   });
+
+  describe('Paired Channels & Deep Pair Synchronization', () => {
+    it('synchronizes fader movement between paired channels (1 & 2)', async () => {
+      // Pair CH 1 & 2
+      ctx.state.channels[0].pair = true;
+      ctx.state.channels[1].pair = true;
+
+      await dispatchClientCommand(
+        { type: 'set_fader', target: 'ch', id: 1, value: 823 },
+        ctx
+      );
+
+      // Both channels in state must update
+      expect(ctx.state.channels[0].fader).toBe(823);
+      expect(ctx.state.channels[1].fader).toBe(823);
+
+      // Both channels must have dirtyParams recorded
+      expect(ctx.dirtyParams.has('ch1:fader')).toBe(true);
+      expect(ctx.dirtyParams.has('ch2:fader')).toBe(true);
+
+      // Broadcast must include updates for both CH 1 and CH 2
+      const ch1Update = broadcastChannelUpdates.find((u) => u.target === 'ch' && u.id === 1);
+      const ch2Update = broadcastChannelUpdates.find((u) => u.target === 'ch' && u.id === 2);
+      expect(ch1Update?.changes).toEqual({ fader: 823 });
+      expect(ch2Update?.changes).toEqual({ fader: 823 });
+    });
+
+    it('synchronizes mute / on toggle between paired channels', async () => {
+      ctx.state.channels[0].pair = true;
+      ctx.state.channels[1].pair = true;
+
+      await dispatchClientCommand(
+        { type: 'set_on', target: 'ch', id: 2, value: false },
+        ctx
+      );
+
+      expect(ctx.state.channels[0].on).toBe(false);
+      expect(ctx.state.channels[1].on).toBe(false);
+
+      const ch1Update = broadcastChannelUpdates.find((u) => u.target === 'ch' && u.id === 1);
+      const ch2Update = broadcastChannelUpdates.find((u) => u.target === 'ch' && u.id === 2);
+      expect(ch1Update?.changes).toEqual({ on: false });
+      expect(ch2Update?.changes).toEqual({ on: false });
+    });
+
+    it('sets pair status mutually on both odd and even partner channels', async () => {
+      await dispatchClientCommand(
+        { type: 'set_pair', id: 1, value: true },
+        ctx
+      );
+
+      expect(ctx.state.channels[0].pair).toBe(true);
+      expect(ctx.state.channels[1].pair).toBe(true);
+
+      const ch1Update = broadcastChannelUpdates.find((u) => u.target === 'ch' && u.id === 1);
+      const ch2Update = broadcastChannelUpdates.find((u) => u.target === 'ch' && u.id === 2);
+      expect(ch1Update?.changes).toEqual({ pair: true });
+      expect(ch2Update?.changes).toEqual({ pair: true });
+    });
+
+    it('handles set_deep_pair command and broadcasts patch', async () => {
+      expect(ctx.state.deepPair).toBe(false);
+
+      await dispatchClientCommand(
+        { type: 'set_deep_pair', enabled: true },
+        ctx
+      );
+
+      expect(ctx.state.deepPair).toBe(true);
+      expect(broadcastPatches).toContainEqual({ deepPair: true });
+    });
+
+    it('does NOT mirror EQ / Dynamics when deepPair is false', async () => {
+      ctx.state.channels[0].pair = true;
+      ctx.state.channels[1].pair = true;
+      ctx.state.deepPair = false;
+
+      await dispatchClientCommand(
+        { type: 'set_eq', target: 'ch', id: 1, param: 'lowG', value: 60 },
+        ctx
+      );
+
+      expect(ctx.state.channels[0].eq.low.gain).toBe(60);
+      expect(ctx.state.channels[1].eq.low.gain).toBe(0); // Unchanged
+    });
+
+    it('mirrors EQ, Comp, Gate, Att, Routing, and Aux Sends when deepPair is true', async () => {
+      ctx.state.channels[0].pair = true;
+      ctx.state.channels[1].pair = true;
+      ctx.state.deepPair = true;
+
+      // 1. EQ
+      await dispatchClientCommand(
+        { type: 'set_eq', target: 'ch', id: 1, param: 'hiMidG', value: 40 },
+        ctx
+      );
+      expect(ctx.state.channels[0].eq.hiMid.gain).toBe(40);
+      expect(ctx.state.channels[1].eq.hiMid.gain).toBe(40);
+      expect(ctx.dirtyParams.has('ch1:eq:hiMidG')).toBe(true);
+      expect(ctx.dirtyParams.has('ch2:eq:hiMidG')).toBe(true);
+
+      // 2. Compressor
+      await dispatchClientCommand(
+        { type: 'set_comp', target: 'ch', id: 1, param: 'threshold', value: -180 },
+        ctx
+      );
+      expect(ctx.state.channels[0].comp.threshold).toBe(-180);
+      expect(ctx.state.channels[1].comp.threshold).toBe(-180);
+
+      // 3. Gate
+      await dispatchClientCommand(
+        { type: 'set_gate', id: 1, param: 'range', value: -500 },
+        ctx
+      );
+      expect(ctx.state.channels[0].gate.range).toBe(-500);
+      expect(ctx.state.channels[1].gate.range).toBe(-500);
+
+      // 4. Attenuation
+      await dispatchClientCommand(
+        { type: 'set_att', id: 1, value: -120 },
+        ctx
+      );
+      expect(ctx.state.channels[0].att).toBe(-120);
+      expect(ctx.state.channels[1].att).toBe(-120);
+
+      // 5. Aux Send
+      await dispatchClientCommand(
+        { type: 'set_aux_send', chId: 1, auxId: 3, param: 'level', value: 750 },
+        ctx
+      );
+      expect(ctx.state.channels[0].auxSends[2].level).toBe(750);
+      expect(ctx.state.channels[1].auxSends[2].level).toBe(750);
+
+      // 6. Routing
+      await dispatchClientCommand(
+        { type: 'set_routing', id: 1, target: 'direct', value: true },
+        ctx
+      );
+      expect(ctx.state.channels[0].routing.direct).toBe(true);
+      expect(ctx.state.channels[1].routing.direct).toBe(true);
+    });
+  });
 });
