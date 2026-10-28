@@ -70,7 +70,11 @@ describe('Server API & WebSocket Error Paths (P2)', () => {
 
     const messages: any[] = [];
     ws.on('message', (raw) => {
-      messages.push(JSON.parse(raw.toString()));
+      try {
+        messages.push(JSON.parse(raw.toString()));
+      } catch {
+        // Binary meter frame or other non-JSON data
+      }
     });
 
     await new Promise<void>((resolve) => {
@@ -111,6 +115,38 @@ describe('Server API & WebSocket Error Paths (P2)', () => {
     await new Promise((r) => setTimeout(r, 60));
     const malformedError = messages.find((m) => m.type === 'error' && m.message.includes('Malformed JSON'));
     expect(malformedError).toBeDefined();
+
+    ws.close();
+    await new Promise((r) => setTimeout(r, 60));
+  });
+
+  it('broadcasts binary meter frames (98 bytes) over WebSocket', async () => {
+    const ws = new WebSocket(`ws://localhost:${testPort}/ws`);
+    const binaryFrames: Buffer[] = [];
+
+    ws.on('message', (data, isBinary) => {
+      if (isBinary && Buffer.isBuffer(data)) {
+        binaryFrames.push(data);
+      }
+    });
+
+    await new Promise<void>((resolve) => {
+      ws.on('open', () => resolve());
+    });
+
+    // Simulate incoming Yamaha meter SysEx packet to mixer controller
+    const fakeMeterSysEx = [
+      0xf0, 0x43, 0x10, 0x3e, 0x0d, 0x21, 0x00, 0x00, 0x00,
+      ...Array(64).fill(0x30),
+      0xf7,
+    ];
+    serverInstance.mixer.handleIncomingMidi(fakeMeterSysEx);
+
+    await new Promise((r) => setTimeout(r, 60));
+    expect(binaryFrames.length).toBeGreaterThanOrEqual(1);
+    const frame = binaryFrames[0];
+    expect(frame.length).toBe(98);
+    expect(frame[0]).toBe(0x4d); // 'M' header
 
     ws.close();
     await new Promise((r) => setTimeout(r, 60));

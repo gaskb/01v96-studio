@@ -19,6 +19,8 @@ export function useMixerWebSocket() {
   });
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const latestMetersRef = useRef<LiveMetersState | null>(null);
+  const animFrameRequestedRef = useRef(false);
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>;
@@ -27,6 +29,7 @@ export function useMixerWebSocket() {
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${proto}//${window.location.host}/ws`;
       const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -34,6 +37,43 @@ export function useMixerWebSocket() {
       };
 
       ws.onmessage = (ev) => {
+        // High-performance Binary Meter Frame (98 bytes: 0x4D, 32 In, 32 Out, 32 GR, 1 Stereo)
+        if (ev.data instanceof ArrayBuffer) {
+          const view = new Uint8Array(ev.data);
+          if (view[0] === 0x4d && view.length >= 98) {
+            const metersIn: Record<string, number> = {};
+            const metersOut: Record<string, number> = {};
+            const grs: Record<string, number> = {};
+
+            for (let ch = 0; ch < 32; ch++) {
+              const k = `ch${ch + 1}`;
+              metersIn[k] = view[1 + ch];
+              metersOut[k] = view[33 + ch];
+              grs[k] = view[65 + ch] / 10;
+            }
+            const stereoMeter = view[97];
+
+            latestMetersRef.current = {
+              metersIn,
+              metersOut,
+              grs,
+              stereoMeter,
+            };
+
+            // Coalesce high-frequency hardware packets to display refresh rate
+            if (!animFrameRequestedRef.current) {
+              animFrameRequestedRef.current = true;
+              requestAnimationFrame(() => {
+                if (latestMetersRef.current) {
+                  setLiveMeters(latestMetersRef.current);
+                }
+                animFrameRequestedRef.current = false;
+              });
+            }
+            return;
+          }
+        }
+
         try {
           const msg = JSON.parse(ev.data);
           if (msg.type === 'full_state') {

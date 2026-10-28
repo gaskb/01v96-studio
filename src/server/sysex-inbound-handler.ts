@@ -49,6 +49,10 @@ import {
 } from './protocol.js';
 import { SceneLabelsStorage } from './scene-labels-storage.js';
 
+// Reusable 98-byte binary meter buffer: [0]: 'M' (0x4D), [1..32]: in, [33..64]: out, [65..96]: gr*10, [97]: stereo
+const binaryMeterBuffer = Buffer.alloc(98);
+binaryMeterBuffer[0] = 0x4d;
+
 export interface InboundContext {
   state: MixerState;
   dirtyParams: Set<string>;
@@ -123,9 +127,9 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
         chObj.meterOut = meterOut;
         chObj.grDb = grDb;
 
-        metersIn[`ch${ch + 1}`] = levelIn;
-        metersOut[`ch${ch + 1}`] = meterOut;
-        grs[`ch${ch + 1}`] = grDb;
+        binaryMeterBuffer[1 + ch] = levelIn;
+        binaryMeterBuffer[33 + ch] = meterOut;
+        binaryMeterBuffer[65 + ch] = Math.min(255, Math.round(grDb * 10));
 
         if (chObj.routing.stereo && chObj.on) {
           stereoLSum += Math.pow(meterOut / 255, 2);
@@ -139,14 +143,9 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
       );
       ctx.state.stereo.meterIn = stLevel;
       ctx.state.stereo.meterOut = ctx.state.stereo.on ? stLevel : 0;
+      binaryMeterBuffer[97] = ctx.state.stereo.meterOut;
 
-      ctx.broadcastMeters({
-        type: 'meters',
-        metersIn,
-        metersOut,
-        grs,
-        stereoMeter: ctx.state.stereo.meterOut,
-      });
+      ctx.broadcastMeters(binaryMeterBuffer);
     }
     return;
   }

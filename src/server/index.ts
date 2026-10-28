@@ -21,6 +21,15 @@ export function createServer(port = Number(process.env.PORT) || 8096, customLayo
   const clients = new Set<WebSocket>();
 
   const broadcast = (payload: unknown) => {
+    if (Buffer.isBuffer(payload) || payload instanceof Uint8Array) {
+      for (const client of clients) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(payload, { binary: true });
+        }
+      }
+      return;
+    }
+
     const data = JSON.stringify(payload);
     for (const client of clients) {
       if (client.readyState === WebSocket.OPEN) {
