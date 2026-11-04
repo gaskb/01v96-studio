@@ -76,6 +76,7 @@ export interface InboundContext {
 export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
   // 1. Standard MIDI Program Change (0xCn, pgm) -> Scene changed on mixer!
   if (msg.length === 2 && (msg[0] & 0xf0) === 0xc0) {
+    ctx.sceneTitleChars.fill(' ');
     ctx.state.sceneNumber = msg[1];
     ctx.applySceneLabels(ctx.state.sceneNumber);
     ctx.broadcastPatch({ sceneNumber: ctx.state.sceneNumber });
@@ -101,6 +102,7 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
 
   // 2. Universal Scene Recall / Store notification (Model 0x7F, DataType 0x10)
   if (modelId === MODEL_UNIVERSAL && dataType === 0x10) {
+    ctx.sceneTitleChars.fill(' ');
     const sceneNo = msg.length >= 11 ? ((msg[8] & 0x7f) << 7) | (msg[9] & 0x7f) : msg[8];
     ctx.state.sceneNumber = sceneNo;
     ctx.applySceneLabels(sceneNo);
@@ -472,6 +474,7 @@ export function handleIncomingMidi(msg: number[], ctx: InboundContext): void {
     }
     // Scene Memory Now / Recall on Mixer (dt=4, el=10, p=0 or p=1)
     else if (dataType === 4 && element === 10 && (param === 0 || param === 1)) {
+      ctx.sceneTitleChars.fill(' ');
       ctx.state.sceneNumber = val;
       ctx.applySceneLabels(val);
       ctx.broadcastPatch({ sceneNumber: val });

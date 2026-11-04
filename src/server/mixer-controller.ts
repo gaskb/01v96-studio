@@ -170,6 +170,7 @@ export class MixerController {
     const startTime = Date.now();
     console.log('🔄 Synchronizing state from Yamaha 01V96 VCM...');
     this.dirtyParams.clear();
+    this.sceneTitleChars.fill(' ');
     this.transport.clearLowPriorityQueue();
 
     // 1. Meter Streaming Start

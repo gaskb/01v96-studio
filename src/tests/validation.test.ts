@@ -111,6 +111,22 @@ describe('Zod ClientCommand Validation (P2)', () => {
     expect(validateClientCommand({ type: 'set_effect', rackId: 1, param: 'invalid_param', value: 10 }).success).toBe(false);
   });
 
+  it('validates channel target bounds: aux (1..8), bus (1..8), stereo (1)', () => {
+    // Valid aux/bus/stereo
+    expect(validateClientCommand({ type: 'set_fader', target: 'aux', id: 1, value: 500 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_fader', target: 'aux', id: 8, value: 500 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_fader', target: 'bus', id: 1, value: 500 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_fader', target: 'bus', id: 8, value: 500 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_fader', target: 'stereo', id: 1, value: 500 }).success).toBe(true);
+
+    // Invalid aux/bus/stereo bounds
+    expect(validateClientCommand({ type: 'set_fader', target: 'aux', id: 9, value: 500 }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_fader', target: 'bus', id: 10, value: 500 }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_fader', target: 'stereo', id: 2, value: 500 }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_on', target: 'aux', id: 12, value: true }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_pan', target: 'stereo', id: 3, value: 0 }).success).toBe(false);
+  });
+
   it('rejects malformed or empty payloads', () => {
     expect(validateClientCommand(null).success).toBe(false);
     expect(validateClientCommand(undefined).success).toBe(false);

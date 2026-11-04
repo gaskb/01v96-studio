@@ -196,6 +196,15 @@ export class YamahaUsbTransport {
 
       inEp.on('error', (err) => {
         console.error('[USB IN Error]', err?.message || err);
+        const errMsg = err?.message || '';
+        if (
+          errMsg.includes('LIBUSB_ERROR_NO_DEVICE') ||
+          errMsg.includes('LIBUSB_ERROR_NOT_FOUND') ||
+          errMsg.includes('device not open')
+        ) {
+          this.disconnect();
+          return;
+        }
         inEp.clearHalt(() => {
           if (!this.connected) return;
           try {
@@ -301,6 +310,15 @@ export class YamahaUsbTransport {
             if (err) {
               console.error('[USB OUT Error]', err.message);
               this.outEndpoint?.clearHalt(() => {});
+              const errMsg = err.message || '';
+              if (
+                errMsg.includes('LIBUSB_ERROR_NO_DEVICE') ||
+                errMsg.includes('LIBUSB_ERROR_NOT_FOUND') ||
+                errMsg.includes('device not open') ||
+                errMsg.includes('LIBUSB_TRANSFER_ERROR')
+              ) {
+                this.disconnect();
+              }
             }
             resChunk();
           });

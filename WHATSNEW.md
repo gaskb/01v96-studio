@@ -9,6 +9,16 @@
 
 All notable changes to **01V96 Studio** are documented here in reverse chronological order.
 
+### [v0.7.0] - 2026-11-04
+- **Fixed & Improved**:
+  - WebSocket error handling and resilience: added `ws.on('error')` and `wss.on('error')` event listeners to prevent server process crashes on abrupt socket resets (`ECONNRESET`/`EPIPE`).
+  - High-frequency meter streaming backpressure protection: automatically drops 98-byte binary meter frames when a client's outbound buffer exceeds 64 KB (`client.bufferedAmount >= 65536`), preventing memory spikes and latency on slow Wi-Fi links.
+  - USB transport hot-unplug recovery: detects fatal USB transfer errors (`LIBUSB_ERROR_NO_DEVICE`, `LIBUSB_TRANSFER_ERROR`) and triggers immediate clean disconnection so the auto-reconnection loop re-establishes communication automatically when the console is power-cycled or reconnected.
+  - Scene title buffer reset: clears the 16-character scene title buffer on program change / recall to eliminate text spillover when switching from long scene titles to shorter ones.
+  - Offline scene recall: `recall_scene` now loads and broadcasts complete channel parameter states from `SceneArchiveStorage` when the hardware mixer is offline or simulated.
+  - Zod validation refinement: strictly enforces target bounds (`aux`: 1..8, `bus`: 1..8, `stereo`: 1, `ch`: 1..32) and requires `busIndex` for bus routing commands.
+  - Docker Container Healthcheck: added native Node.js HTTP healthcheck probe to `Dockerfile` and `docker-compose.yml` querying `/api/health`.
+
 ### [v0.6.0] - 2026-10-28
 - **Added**:
   - Comprehensive Mixer Show Backup & Restore System:
@@ -66,6 +76,16 @@ All notable changes to **01V96 Studio** are documented here in reverse chronolog
 ## Italiano
 
 Tutte le modifiche rilevanti apportate a **01V96 Studio** sono documentate qui in ordine cronologico inverso.
+
+### [v0.7.0] - 2026-11-04
+- **Correzioni e Miglioramenti (Fixed & Improved)**:
+  - Gestione errori e resilienza WebSocket: aggiunti listener `ws.on('error')` e `wss.on('error')` per prevenire crash del processo server in caso di chiusure socket repentine (`ECONNRESET`/`EPIPE`).
+  - Protezione da backpressure sullo streaming meter: scarto automatico dei frame binari da 98 byte se il buffer di uscita del client supera 64 KB (`client.bufferedAmount >= 65536`), prevenendo picchi di RAM e latenza su client Wi-Fi lenti.
+  - Recupero disconnessione USB a caldo (hot-unplug): intercetta errori fatali di trasmissione (`LIBUSB_ERROR_NO_DEVICE`, `LIBUSB_TRANSFER_ERROR`) attivando la disconnessione pulita immediata per permettere al loop di auto-riconnessione di riagganciare il banco non appena riacceso o ricollegato.
+  - Reset buffer titolo scena: azzera il buffer a 16 caratteri al cambio di memoria (Program Change / Recall SysEx) eliminando lo spillover di lettere da nomi precedenti più lunghi.
+  - Richiamo scene offline/simulate: `recall_scene` ripristina e trasmette lo stato completo dei canali da `SceneArchiveStorage` anche quando il mixer hardware non è fisicamente collegato.
+  - Raffinamento validatori Zod: vincola i canali ai range effettivi del mixer (`aux`: 1..8, `bus`: 1..8, `stereo`: 1, `ch`: 1..32) e rende obbligatorio `busIndex` nei comandi di routing bus.
+  - Healthcheck container Docker: aggiunta verifica nativa di salute via Node.js nel `Dockerfile` e nel `docker-compose.yml` sull'endpoint `/api/health`.
 
 ### [v0.6.0] - 2026-10-28
 - **Novità (Added)**:

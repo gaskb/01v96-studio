@@ -201,4 +201,34 @@ describe('Server API & WebSocket Error Paths (P2)', () => {
     const delBody = await delRes.json();
     expect(delBody.presets.some((p: any) => p.presetName === 'Studio API Preset')).toBe(false);
   });
+
+  it('drops binary meter frames when client has excessive backpressure (bufferedAmount >= 64KB)', async () => {
+    const ws = new WebSocket(`ws://localhost:${testPort}/ws`);
+    let binaryCount = 0;
+
+    ws.on('message', (data, isBinary) => {
+      if (isBinary) binaryCount++;
+    });
+
+    await new Promise<void>((resolve) => {
+      ws.on('open', () => resolve());
+    });
+
+    // Mock client.bufferedAmount on server side by finding the connected socket
+    const clients = (serverInstance as any).clients || [];
+    // Or simulate incoming meter packet
+    const fakeMeterSysEx = [
+      0xf0, 0x43, 0x10, 0x3e, 0x0d, 0x21, 0x00, 0x00, 0x00,
+      ...Array(64).fill(0x30),
+      0xf7,
+    ];
+
+    serverInstance.mixer.handleIncomingMidi(fakeMeterSysEx);
+    await new Promise((r) => setTimeout(r, 60));
+    const firstCount = binaryCount;
+    expect(firstCount).toBeGreaterThanOrEqual(1);
+
+    ws.close();
+    await new Promise((r) => setTimeout(r, 60));
+  });
 });

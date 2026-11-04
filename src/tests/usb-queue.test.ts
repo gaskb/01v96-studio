@@ -42,4 +42,26 @@ describe('YamahaUsbTransport FIFO Queue & Error Paths (P1/P2)', () => {
     await expect(Promise.all([h1, l1])).resolves.toBeDefined();
     expect(transport.getLowQueueLength()).toBe(0);
   });
+
+  it('triggers disconnect on fatal USB transfer error', async () => {
+    const transport = new YamahaUsbTransport();
+    let disconnectedFired = false;
+    transport.onStatusChange((connected) => {
+      if (!connected) disconnectedFired = true;
+    });
+
+    // Mock internal endpoint and connected state
+    (transport as any).connected = true;
+    (transport as any).outEndpoint = {
+      transfer: (_chunk: any, cb: (err?: any) => void) => {
+        cb(new Error('LIBUSB_ERROR_NO_DEVICE'));
+      },
+      clearHalt: (_cb: any) => {},
+    };
+
+    await transport.sendSysEx([0xf0, 0x43, 0x10, 0x3e, 0x7f, 0x01, 0x28, 0x00, 0x00, 0xf7]);
+
+    expect(transport.isConnected()).toBe(false);
+    expect(disconnectedFired).toBe(true);
+  });
 });

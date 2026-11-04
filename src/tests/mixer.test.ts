@@ -320,4 +320,57 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.1)', () => {
       delete process.env.LABELS_FILE_PATH;
     }
   });
+
+  it('resets scene title buffer on program change to avoid name spillover', () => {
+    const controller = new MixerController(() => {});
+    // Simulate incoming scene title: "PULP FICTION" (12 chars)
+    const title1 = 'PULP FICTION';
+    for (let p = 0; p < title1.length; p++) {
+      controller.handleIncomingMidi(
+        buildParamChange(MODEL_UNIVERSAL, 1, 1, p, 0, title1.charCodeAt(p))
+      );
+    }
+    expect(controller.state.sceneTitle).toBe('PULP FICTION');
+
+    // Recall scene 3 via MIDI Program Change [0xc0, 3]
+    controller.handleIncomingMidi([0xc0, 3]);
+    expect(controller.state.sceneNumber).toBe(3);
+
+    // Incoming title for Scene 3: "ROCK" (4 chars)
+    const title2 = 'ROCK';
+    for (let p = 0; p < title2.length; p++) {
+      controller.handleIncomingMidi(
+        buildParamChange(MODEL_UNIVERSAL, 1, 1, p, 0, title2.charCodeAt(p))
+      );
+    }
+    // Must be "ROCK", NOT "ROCK FICTION"
+    expect(controller.state.sceneTitle).toBe('ROCK');
+  });
+
+  it('restores archived channel parameters on offline scene recall', async () => {
+    const controller = new MixerController(() => {});
+    // Setup scene 7 with specific faders
+    controller.state.channels[0].fader = 950;
+    controller.state.channels[1].fader = 700;
+    await controller.handleClientCommand({
+      type: 'store_scene',
+      sceneNumber: 7,
+      title: 'Acoustic Set',
+    });
+
+    // Change faders on current working state
+    controller.state.channels[0].fader = 200;
+    controller.state.channels[1].fader = 100;
+    expect(controller.state.channels[0].fader).toBe(200);
+
+    // Recall scene 7 while offline
+    await controller.handleClientCommand({
+      type: 'recall_scene',
+      sceneNumber: 7,
+    });
+
+    expect(controller.state.channels[0].fader).toBe(950);
+    expect(controller.state.channels[1].fader).toBe(700);
+    expect(controller.state.sceneTitle).toBe('Acoustic Set');
+  });
 });

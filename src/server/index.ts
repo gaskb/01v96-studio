@@ -23,7 +23,7 @@ export function createServer(port = Number(process.env.PORT) || 8096, customLayo
   const broadcast = (payload: unknown) => {
     if (Buffer.isBuffer(payload) || payload instanceof Uint8Array) {
       for (const client of clients) {
-        if (client.readyState === WebSocket.OPEN) {
+        if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 65536) {
           client.send(payload, { binary: true });
         }
       }
@@ -41,8 +41,17 @@ export function createServer(port = Number(process.env.PORT) || 8096, customLayo
   const mixer = new MixerController(broadcast);
   const layoutStorage = new LayoutStorage(customLayoutStoragePath);
 
+  wss.on('error', (err) => {
+    console.error('[WSS Server Error]', err);
+  });
+
   wss.on('connection', (ws) => {
     clients.add(ws);
+
+    ws.on('error', (err) => {
+      console.warn('[WS Client Error]', err?.message || err);
+    });
+
     // Send full initial state immediately upon connection
     ws.send(JSON.stringify({ type: 'full_state', state: mixer.state }));
 
@@ -236,6 +245,14 @@ export function createServer(port = Number(process.env.PORT) || 8096, customLayo
     stop: () =>
       new Promise<void>((resolve) => {
         mixer.stop();
+        for (const client of clients) {
+          try {
+            client.terminate();
+          } catch {
+            // ignore
+          }
+        }
+        clients.clear();
         wss.close();
         server.close(() => resolve());
       }),

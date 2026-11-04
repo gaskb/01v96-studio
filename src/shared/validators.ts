@@ -3,7 +3,7 @@ import { z } from 'zod';
 const targetChAuxBusStereo = z.enum(['ch', 'aux', 'bus', 'stereo']);
 const targetChAuxBus = z.enum(['ch', 'aux', 'bus']);
 
-export const ClientCommandSchema = z.discriminatedUnion('type', [
+export const BaseClientCommandSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_fader'),
     target: targetChAuxBusStereo,
@@ -198,13 +198,38 @@ export const ClientCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('trigger_demo_wave'),
     mode: z.enum(['sine', 'bounce', 'v-shape', 'stop']).optional(),
   }),
-]).refine(
-  (cmd) => cmd.type !== 'set_routing' || cmd.target !== 'bus' || cmd.busIndex !== undefined,
-  {
-    message: 'busIndex (0..7) is required when target is "bus"',
-    path: ['busIndex'],
+]);
+
+export const ClientCommandSchema = BaseClientCommandSchema.superRefine((cmd, ctx) => {
+  if (cmd.type === 'set_routing' && cmd.target === 'bus' && cmd.busIndex === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'busIndex (0..7) is required when target is "bus"',
+      path: ['busIndex'],
+    });
   }
-);
+
+  // Channel target bounds checks
+  if ('target' in cmd && cmd.target !== undefined) {
+    const target = cmd.target;
+    const id = (cmd as { id?: number }).id;
+    if (typeof id === 'number') {
+      if ((target === 'aux' || target === 'bus') && (id < 1 || id > 8)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `For target '${target}', id must be between 1 and 8 (received ${id})`,
+          path: ['id'],
+        });
+      } else if (target === 'stereo' && id !== 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `For target 'stereo', id must be 1 (received ${id})`,
+          path: ['id'],
+        });
+      }
+    }
+  }
+});
 
 export type ClientCommand = z.infer<typeof ClientCommandSchema>;
 

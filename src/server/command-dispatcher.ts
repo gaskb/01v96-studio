@@ -579,10 +579,23 @@ export async function dispatchClientCommand(
     case 'recall_scene': {
       const pgm = clampInt(cmd.sceneNumber, 0, 99, 0);
       ctx.state.sceneNumber = pgm;
+      if (ctx.archiveStorage) {
+        const archived = ctx.archiveStorage.getScene(pgm);
+        if (archived) {
+          ctx.state.sceneTitle =
+            archived.title || (pgm === 0 ? 'Initial Data' : `Scene #${String(pgm).padStart(2, '0')}`);
+          if (archived.channels) ctx.state.channels = structuredClone(archived.channels);
+          if (archived.auxes) ctx.state.auxes = structuredClone(archived.auxes);
+          if (archived.buses) ctx.state.buses = structuredClone(archived.buses);
+          if (archived.stereo) ctx.state.stereo = structuredClone(archived.stereo);
+          if (archived.effects) ctx.state.effects = structuredClone(archived.effects);
+          ctx.state.savedChannels = structuredClone(ctx.state.channels);
+        }
+      }
       await ctx.transport.sendSysEx(buildSceneRecallSysEx(pgm));
       await ctx.transport.sendSysEx([0xc0, pgm]);
       ctx.applySceneLabels(pgm);
-      ctx.broadcastPatch({ sceneNumber: pgm });
+      ctx.broadcastState();
       ctx.scheduleSceneResync();
       break;
     }
