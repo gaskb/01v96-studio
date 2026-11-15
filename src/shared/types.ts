@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.7.0';
-export const UI_VERSION = '0.7.0';
-export const API_VERSION = '0.7.0';
+export const APP_VERSION = '0.8.0';
+export const UI_VERSION = '0.8.0';
+export const API_VERSION = '0.8.0';
 
 export type ControlMode = 'knobs' | 'sliders';
 
@@ -73,6 +73,7 @@ export interface InputChannelState {
   name: string;
   on: boolean;       // Channel ON (Unmuted)
   solo: boolean;
+  slow?: boolean;    // Slow/Glide fader slew-rate mode
   fader: number;     // 0..1023 (823 = 0.0 dB)
   pan: number;       // -63..+63 (0 = Center)
   phase: boolean;    // false = Normal, true = Reverse
@@ -97,6 +98,7 @@ export interface OutputChannelState {
   name: string;
   on: boolean;
   solo: boolean;
+  slow?: boolean;    // Slow/Glide fader slew-rate mode
   fader: number;     // 0..1023
   pan: number;       // -63..+63 balance
   meterIn: number;
@@ -131,6 +133,10 @@ export interface MixerSetupState {
   omniOutPatch: number[];   // 4 Omni Outs patch assignments
 }
 
+export interface StudioSettings {
+  faderGlideDbPerSec: number; // Max fader slew rate in dB/sec when SLOW mode is active (1..60)
+}
+
 export interface MixerState {
   connected: boolean;
   connectionMode: 'usb-direct' | 'simulated';
@@ -143,6 +149,7 @@ export interface MixerState {
   deepPair: boolean;       // Sync EQ, dynamics, and strip params across paired channels
   activeLayer: number;     // 0 = 1-16, 1 = 17-32, 2 = Master/AUX/BUS, 3 = Remote
   demoWaveActive: boolean;
+  studioSettings: StudioSettings;
   channels: InputChannelState[];  // 32 input channels
   savedChannels: InputChannelState[]; // 32 input channels scene snapshot (last stored/synced values)
   auxes: OutputChannelState[];    // 8 AUX masters

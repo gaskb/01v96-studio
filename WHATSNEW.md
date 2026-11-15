@@ -9,6 +9,12 @@
 
 All notable changes to **01V96 Studio** are documented here in reverse chronological order.
 
+### [v0.8.0] - 2026-11-15
+- **Added**:
+  - **Studio Settings Panel** (`⚙️ SETUP & CONF`): centralized configuration for global fader glide speed (`1..30 dB/s`, persisted in `data/studio-settings.json`) and one-click `SLW` activation/deactivation across all channels.
+  - **Fader Slow / Glide Mode (`SLW`)**: per-channel toggle button next to `ON` and `SOLO` on all `FaderStrip` components (`CH 1-32`, `AUX`, `BUS`, `STEREO`) with smooth `requestAnimationFrame` dB/sec slew-rate interpolation for clicks, drags, and direct numeric input.
+  - **Full Hardware State Push & Pull**: expanded `sendFullStateToHardware()` to transmit complete scene configurations (Faders, On, Pan, Phase, Att, Pair, Delay, 4-Band EQ + HPF/LPF, Gate, Comp, Aux Sends, Routing, Patches, Names, Aux/Bus/Stereo masters) via SysEx, with dedicated `PULL` and `PUSH` UI actions and safety confirmation dialog.
+
 ### [v0.7.0] - 2026-11-04
 - **Fixed & Improved**:
   - WebSocket error handling and resilience: added `ws.on('error')` and `wss.on('error')` event listeners to prevent server process crashes on abrupt socket resets (`ECONNRESET`/`EPIPE`).
@@ -76,6 +82,12 @@ All notable changes to **01V96 Studio** are documented here in reverse chronolog
 ## Italiano
 
 Tutte le modifiche rilevanti apportate a **01V96 Studio** sono documentate qui in ordine cronologico inverso.
+
+### [v0.8.0] - 2026-11-15
+- **Novità (Added)**:
+  - **Pannello Studio Settings** (`⚙️ SETUP & CONF`): configurazione centralizzata della velocità di movimento fader (`1..30 dB/s`, salvata in `data/studio-settings.json`) con attivazione/disattivazione globale rapida di `SLW` su tutti i canali.
+  - **Modalità Fader Slow / Glide (`SLW`)**: pulsante dedicato per singolo canale accanto a `ON` e `SOLO` su tutte le fader strip (`CH 1-32`, `AUX`, `BUS`, `STEREO`) con interpolazione fluida in dB/sec via `requestAnimationFrame` per click, drag e input numerico diretto.
+  - **Sincronizzazione Completa Hardware (Push & Pull)**: esteso `sendFullStateToHardware()` per trasmettere l'intera scena corrente via SysEx (Fader, On, Pan, Phase, Att, Pair, Delay, EQ 4 bande + HPF/LPF, Gate, Comp, Mandate Aux, Routing, Patch, Nomi e Master Aux/Bus/Stereo), con pulsanti dedicati `PULL` / `PUSH` e modale di conferma.
 
 ### [v0.7.0] - 2026-11-04
 - **Correzioni e Miglioramenti (Fixed & Improved)**:

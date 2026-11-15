@@ -49,7 +49,11 @@ export const SystemMenusPanel: React.FC<SystemMenusPanelProps> = ({
   sendCommand,
 }) => {
   const [selectedGeqUnit, setSelectedGeqUnit] = useState(1);
+  const [confirmPushOpen, setConfirmPushOpen] = useState(false);
+  const [storeOnPush, setStoreOnPush] = useState(true);
   const currentGeq = state.geqs[selectedGeqUnit - 1] ?? state.geqs[0];
+  const glideSpeed = state.studioSettings?.faderGlideDbPerSec ?? 6;
+  const activeSlowCount = state.channels.filter((c) => c.slow).length;
 
   if (mode === 'effects-geq') {
     return (
@@ -372,6 +376,178 @@ export const SystemMenusPanel: React.FC<SystemMenusPanelProps> = ({
   // mode === 'setup-lcd'
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto p-1">
+      {/* Studio Configuration & Offline Workflow Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Studio Fader Glide / Slow Speed Config */}
+        <div className="bg-[#0c1018] border border-indigo-500/30 rounded-2xl p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-mono font-bold text-indigo-300 uppercase">
+                🎛️ STUDIO SETTINGS — FADER GLIDE (SLW)
+              </h2>
+              <p className="text-xs text-slate-400">
+                Limita la velocità di movimento degli slider quando il pulsante SLW è attivo
+              </p>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-500/40 font-mono font-bold text-xs text-indigo-200">
+              {glideSpeed} dB/s
+            </span>
+          </div>
+
+          <div>
+            <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+              <span>VELOCITÀ MASSIMA SLIDER</span>
+              <span className="text-indigo-300">
+                Da -20 dB a 0 dB in {(20 / Math.max(1, glideSpeed)).toFixed(1)}s
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={30}
+              step={0.5}
+              value={glideSpeed}
+              onChange={(e) =>
+                sendCommand({
+                  type: 'set_studio_settings',
+                  faderGlideDbPerSec: Number(e.target.value),
+                })
+              }
+              className="w-full accent-indigo-400 cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+              <span>1 dB/s (Lento)</span>
+              <span>6 dB/s (Default)</span>
+              <span>15 dB/s (Medio)</span>
+              <span>30 dB/s (Rapido)</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+            <span className="text-[11px] font-mono text-slate-400">
+              Canali con SLW attivo:{' '}
+              <strong className="text-indigo-300">{activeSlowCount}/32</strong>
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => sendCommand({ type: 'set_all_slow', value: true })}
+                className="px-2.5 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-500 text-white text-[11px] font-mono font-bold cursor-pointer transition"
+              >
+                ATTIVA SLW TUTTI
+              </button>
+              <button
+                onClick={() => sendCommand({ type: 'set_all_slow', value: false })}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono font-bold cursor-pointer transition"
+              >
+                DISATTIVA TUTTI
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Hardware Sync & Offline-to-Live Push */}
+        <div className="bg-[#0c1018] border border-cyan-500/30 rounded-2xl p-4 flex flex-col justify-between gap-3">
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-mono font-bold text-cyan-300 uppercase">
+                🔄 OFFLINE WORKFLOW & HARDWARE SYNC
+              </h2>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                  state.connected
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                    : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                }`}
+              >
+                {state.connected ? 'USB CONNESSO' : 'OFFLINE / SIMULATO'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Scarica la scena corrente dal banco per lavorarci offline a mixer spento, oppure invia
+              l&apos;intera configurazione locale (Fader, EQ, Dinamica, Mandate, Routing) al mixer fisico.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <button
+              onClick={() => sendCommand({ type: 'pull_from_hardware' })}
+              disabled={!state.connected}
+              className={`py-2.5 px-3 rounded-xl font-mono font-bold text-xs border transition flex items-center justify-center gap-2 ${
+                state.connected
+                  ? 'bg-slate-900 hover:bg-slate-800 text-cyan-300 border-cyan-500/40 cursor-pointer'
+                  : 'bg-slate-900/40 text-slate-600 border-slate-800 cursor-not-allowed'
+              }`}
+            >
+              <span>📥</span>
+              <span>SCARICA DAL BANCO (PULL)</span>
+            </button>
+
+            <button
+              onClick={() => setConfirmPushOpen(true)}
+              disabled={!state.connected}
+              className={`py-2.5 px-3 rounded-xl font-mono font-bold text-xs border transition flex items-center justify-center gap-2 ${
+                state.connected
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-300 cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.3)]'
+                  : 'bg-slate-900/40 text-slate-600 border-slate-800 cursor-not-allowed'
+              }`}
+            >
+              <span>📤</span>
+              <span>INVIA AL BANCO (PUSH)</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal for Full Hardware Push */}
+      {confirmPushOpen && (
+        <div
+          onClick={() => setConfirmPushOpen(false)}
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 select-none"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#0e131d] border border-amber-500/60 rounded-2xl p-5 max-w-md w-full flex flex-col gap-4 shadow-[0_0_30px_rgba(245,158,11,0.25)]"
+          >
+            <div className="flex items-center gap-3 text-amber-400">
+              <span className="text-2xl">📤</span>
+              <h3 className="font-mono font-bold text-sm text-white">
+                CONFERMA INVIO COMPLETO AL MIXER
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 font-mono leading-relaxed">
+              Verranno inviati tutti i parametri della scena corrente (<strong>#{String(state.sceneNumber).padStart(2, '0')} {state.sceneTitle}</strong>)
+              al mixer fisico Yamaha 01V96 via USB: Fader motorizzati, EQ, Gate, Compressori, Mandate Aux, Routing e Nomi.
+            </p>
+            <label className="flex items-center gap-2 text-xs font-mono text-cyan-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={storeOnPush}
+                onChange={(e) => setStoreOnPush(e.target.checked)}
+                className="accent-cyan-400"
+              />
+              Salva (Store) anche nello slot scena #{String(state.sceneNumber).padStart(2, '0')} del mixer
+            </label>
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800">
+              <button
+                onClick={() => setConfirmPushOpen(false)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono cursor-pointer transition"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmPushOpen(false);
+                  sendCommand({ type: 'push_to_hardware', storeToScene: storeOnPush });
+                }}
+                className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-mono font-bold text-xs cursor-pointer transition"
+              >
+                Invia Configurazione
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Remote Hardware LCD Screen Navigator */}
       <div className="bg-[#0c1018] border border-slate-800/90 rounded-2xl p-4">
         <h2 className="text-sm font-mono font-bold text-cyan-300 uppercase mb-1">

@@ -34,6 +34,7 @@ const FullChannelColumn: React.FC<{
   savedCh?: InputChannelState;
   controlMode: ControlMode;
   isSelected: boolean;
+  glideDbPerSec: number;
   sendCommand: (cmd: ClientCommand) => void;
   layout: ChannelLayoutConfig;
   gridCols: number;
@@ -55,6 +56,7 @@ const FullChannelColumn: React.FC<{
   savedCh,
   controlMode,
   isSelected,
+  glideDbPerSec,
   sendCommand,
   layout,
   gridCols,
@@ -88,6 +90,8 @@ const FullChannelColumn: React.FC<{
           name={ch.name}
           on={ch.on}
           solo={ch.solo}
+          slow={ch.slow}
+          glideDbPerSec={glideDbPerSec}
           fader={ch.fader}
           savedFader={savedCh?.fader}
           pan={ch.pan}
@@ -101,6 +105,9 @@ const FullChannelColumn: React.FC<{
           onToggleOn={() => sendCommand({ type: 'set_on', target: 'ch', id: ch.id, value: !ch.on })}
           onToggleSolo={() =>
             sendCommand({ type: 'set_solo', target: 'ch', id: ch.id, value: !ch.solo })
+          }
+          onToggleSlow={() =>
+            sendCommand({ type: 'set_slow', target: 'ch', id: ch.id, value: !ch.slow })
           }
           onChangePan={(val) =>
             sendCommand({ type: 'set_pan', target: 'ch', id: ch.id, value: val })
@@ -581,6 +588,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
             savedCh={savedPrimaryCh}
             controlMode={controlMode}
             isSelected={true}
+            glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
             sendCommand={sendCommand}
             layout={layout}
             gridCols={gridCols}
@@ -605,6 +613,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               savedCh={savedLeftCh}
               controlMode={controlMode}
               isSelected={state.selectedChannel === leftCh.id}
+              glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
               sendCommand={sendCommand}
               layout={layout}
               gridCols={gridCols}
@@ -627,6 +636,7 @@ export const SingleDualChannelView: React.FC<SingleDualChannelViewProps> = ({
               savedCh={savedRightCh}
               controlMode={controlMode}
               isSelected={state.selectedChannel === rightCh.id}
+              glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
               sendCommand={sendCommand}
               layout={layout}
               gridCols={gridCols}

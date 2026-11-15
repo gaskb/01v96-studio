@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   COMP_RATIOS,
+  dbNumberToFader,
   dbStringToFader,
   eqIndexToFreqHz,
   eqIndexToQValue,
+  faderToDbNumber,
   faderToDbString,
   formatEqQ,
   formatFreqHz,
@@ -131,6 +133,21 @@ describe('Shared Audio Converters (src/shared/converters.ts)', () => {
       expect(formatPan(0)).toBe('C');
       expect(formatPan(-16)).toBe('L16');
       expect(formatPan(32)).toBe('R32');
+    });
+  });
+
+  describe('faderToDbNumber & dbNumberToFader', () => {
+    it('round-trips key numeric fader positions accurately', () => {
+      expect(faderToDbNumber(823)).toBe(0);
+      expect(faderToDbNumber(1023)).toBe(10);
+      expect(faderToDbNumber(423)).toBe(-20);
+      expect(faderToDbNumber(0)).toBe(-138);
+
+      expect(dbNumberToFader(0)).toBe(823);
+      expect(dbNumberToFader(10)).toBe(1023);
+      expect(dbNumberToFader(-20)).toBe(423);
+      expect(dbNumberToFader(-138)).toBe(0);
+      expect(dbNumberToFader(-60)).toBeLessThan(123);
     });
   });
 });

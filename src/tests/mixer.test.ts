@@ -1,3 +1,6 @@
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import { describe, expect, it } from 'vitest';
 import {
   eqIndexToFreqHz,
@@ -10,6 +13,7 @@ import {
 import { calcBandDbAtFreq, resolveResetValue } from '../client/components/InteractiveEQ.js';
 import { resolveKnobReset } from '../client/components/RotaryKnob.js';
 import { computePostDspMeter, MixerController } from '../server/mixer-controller.js';
+import { StudioSettingsStorage } from '../server/studio-settings-storage.js';
 import {
   buildMeterRequest,
   buildParamChange,
@@ -372,5 +376,77 @@ describe('Yamaha 01V96 Protocol & Converters (v0.2.1)', () => {
     expect(controller.state.channels[0].fader).toBe(950);
     expect(controller.state.channels[1].fader).toBe(700);
     expect(controller.state.sceneTitle).toBe('Acoustic Set');
+  });
+
+  it('persists StudioSettingsStorage and handles corrupted JSON gracefully', () => {
+    const tmpFile = path.join(os.tmpdir(), `01v96-studio-settings-test-${Date.now()}.json`);
+    try {
+      const storage = new StudioSettingsStorage(tmpFile);
+      expect(storage.get().faderGlideDbPerSec).toBe(6);
+
+      const updated = storage.update({ faderGlideDbPerSec: 12.5 });
+      expect(updated.faderGlideDbPerSec).toBe(12.5);
+
+      const reloaded = new StudioSettingsStorage(tmpFile);
+      expect(reloaded.get().faderGlideDbPerSec).toBe(12.5);
+
+      // Corrupt file fallback
+      fs.writeFileSync(tmpFile, '{bad json', 'utf-8');
+      const corrupted = new StudioSettingsStorage(tmpFile);
+      expect(corrupted.get().faderGlideDbPerSec).toBe(6);
+    } finally {
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    }
+  });
+
+  it('handles set_slow, set_all_slow, set_studio_settings, and push_to_hardware error when offline', async () => {
+    const tmpSettings = path.join(os.tmpdir(), `01v96-ctrl-settings-${Date.now()}.json`);
+    process.env.STUDIO_SETTINGS_PATH = tmpSettings;
+    try {
+      const controller = new MixerController(() => {});
+      await controller.handleClientCommand({ type: 'set_slow', target: 'ch', id: 1, value: true });
+      expect(controller.state.channels[0].slow).toBe(true);
+
+      await controller.handleClientCommand({ type: 'set_all_slow', value: true });
+      expect(controller.state.channels.every((c) => c.slow === true)).toBe(true);
+      expect(controller.state.stereo.slow).toBe(true);
+
+      await controller.handleClientCommand({ type: 'set_studio_settings', faderGlideDbPerSec: 15 });
+      expect(controller.state.studioSettings.faderGlideDbPerSec).toBe(15);
+
+      // Error path: push_to_hardware when USB is disconnected must throw an explicit error
+      await expect(
+        controller.handleClientCommand({ type: 'push_to_hardware', storeToScene: true })
+      ).rejects.toThrow(/USB non connesso/);
+    } finally {
+      delete process.env.STUDIO_SETTINGS_PATH;
+      if (fs.existsSync(tmpSettings)) fs.unlinkSync(tmpSettings);
+    }
+  });
+
+  it('sends full hardware SysEx blocks (EQ, Gate, Comp, Routing, Aux, Faders) on pushToHardware', async () => {
+    const controller = new MixerController(() => {});
+    const sentSysEx: number[][] = [];
+    // Mock connected transport
+    (controller as any).transport = {
+      isConnected: () => true,
+      sendSysEx: async (msg: number[]) => {
+        sentSysEx.push(msg);
+      },
+      clearLowPriorityQueue: () => {},
+      disconnect: () => {},
+      onMessage: () => {},
+      onStatusChange: () => {},
+    };
+
+    const ok = await controller.pushToHardware(true);
+    expect(ok).toBe(true);
+    // Should send >2000 SysEx messages (32 ch * ~70 params + 8 aux + 8 bus + stereo + scene title + store)
+    expect(sentSysEx.length).toBeGreaterThan(2000);
+    // Last message must be Scene Store SysEx (0x7F, 0x10, 0x10)
+    const last = sentSysEx[sentSysEx.length - 1];
+    expect(last[4]).toBe(0x7f);
+    expect(last[5]).toBe(0x10);
+    expect(last[6]).toBe(0x10);
   });
 });

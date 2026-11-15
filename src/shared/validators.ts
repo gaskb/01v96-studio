@@ -198,6 +198,32 @@ export const BaseClientCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('trigger_demo_wave'),
     mode: z.enum(['sine', 'bounce', 'v-shape', 'stop']).optional(),
   }),
+
+  z.object({
+    type: z.literal('set_slow'),
+    target: targetChAuxBusStereo,
+    id: z.number().int().min(1).max(32),
+    value: z.boolean(),
+  }),
+
+  z.object({
+    type: z.literal('set_all_slow'),
+    value: z.boolean(),
+  }),
+
+  z.object({
+    type: z.literal('set_studio_settings'),
+    faderGlideDbPerSec: z.number().finite().min(1).max(60),
+  }),
+
+  z.object({
+    type: z.literal('push_to_hardware'),
+    storeToScene: z.boolean().optional(),
+  }),
+
+  z.object({
+    type: z.literal('pull_from_hardware'),
+  }),
 ]);
 
 export const ClientCommandSchema = BaseClientCommandSchema.superRefine((cmd, ctx) => {

@@ -127,6 +127,18 @@ describe('Zod ClientCommand Validation (P2)', () => {
     expect(validateClientCommand({ type: 'set_pan', target: 'stereo', id: 3, value: 0 }).success).toBe(false);
   });
 
+  it('validates set_slow, set_all_slow, set_studio_settings, and hardware sync commands', () => {
+    expect(validateClientCommand({ type: 'set_slow', target: 'ch', id: 1, value: true }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_slow', target: 'aux', id: 9, value: true }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_all_slow', value: true }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_studio_settings', faderGlideDbPerSec: 12.5 }).success).toBe(true);
+    expect(validateClientCommand({ type: 'set_studio_settings', faderGlideDbPerSec: 0 }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_studio_settings', faderGlideDbPerSec: 65 }).success).toBe(false);
+    expect(validateClientCommand({ type: 'set_studio_settings', faderGlideDbPerSec: NaN }).success).toBe(false);
+    expect(validateClientCommand({ type: 'push_to_hardware', storeToScene: true }).success).toBe(true);
+    expect(validateClientCommand({ type: 'pull_from_hardware' }).success).toBe(true);
+  });
+
   it('rejects malformed or empty payloads', () => {
     expect(validateClientCommand(null).success).toBe(false);
     expect(validateClientCommand(undefined).success).toBe(false);

@@ -41,6 +41,7 @@ import {
 } from './protocol.js';
 import { SceneArchiveStorage } from './scene-archive-storage.js';
 import { SceneLabelsStorage } from './scene-labels-storage.js';
+import { StudioSettingsStorage } from './studio-settings-storage.js';
 import { YamahaUsbTransport } from './usb-transport.js';
 
 export interface CommandDispatcherContext {
@@ -49,6 +50,7 @@ export interface CommandDispatcherContext {
   dirtyParams: Set<string>;
   labelsStorage: SceneLabelsStorage;
   archiveStorage?: SceneArchiveStorage;
+  studioSettingsStorage?: StudioSettingsStorage;
   broadcastChannelUpdate: (
     target: 'ch' | 'aux' | 'bus' | 'stereo',
     id: number,
@@ -60,6 +62,7 @@ export interface CommandDispatcherContext {
   scheduleSceneResync: () => void;
   syncChannelStrip: (id: number) => Promise<void>;
   initialSync: () => Promise<void>;
+  pushToHardware?: (storeToScene?: boolean) => Promise<boolean>;
   startDemoWave: (mode?: 'sine' | 'bounce' | 'v-shape') => Promise<void>;
   stopDemoWave: () => Promise<void>;
 }
@@ -758,9 +761,60 @@ export async function dispatchClientCommand(
       break;
     }
 
-    case 'sync_all': {
+    case 'sync_all':
+    case 'pull_from_hardware': {
       await ctx.initialSync();
       ctx.broadcastState();
+      break;
+    }
+
+    case 'push_to_hardware': {
+      if (ctx.pushToHardware) {
+        const ok = await ctx.pushToHardware(Boolean(cmd.storeToScene));
+        if (!ok) {
+          throw new Error('Mixer USB non connesso: impossibile inviare la configurazione all’hardware.');
+        }
+      }
+      break;
+    }
+
+    case 'set_slow': {
+      const ch = cmd.id - 1;
+      const val = Boolean(cmd.value);
+      if (cmd.target === 'ch' && ctx.state.channels[ch]) {
+        ctx.state.channels[ch].slow = val;
+        ctx.broadcastChannelUpdate('ch', cmd.id, { slow: val });
+      } else if (cmd.target === 'aux' && ctx.state.auxes[ch]) {
+        ctx.state.auxes[ch].slow = val;
+        ctx.broadcastChannelUpdate('aux', cmd.id, { slow: val });
+      } else if (cmd.target === 'bus' && ctx.state.buses[ch]) {
+        ctx.state.buses[ch].slow = val;
+        ctx.broadcastChannelUpdate('bus', cmd.id, { slow: val });
+      } else if (cmd.target === 'stereo') {
+        ctx.state.stereo.slow = val;
+        ctx.broadcastChannelUpdate('stereo', 1, { slow: val });
+      }
+      break;
+    }
+
+    case 'set_all_slow': {
+      const val = Boolean(cmd.value);
+      for (const c of ctx.state.channels) c.slow = val;
+      for (const a of ctx.state.auxes) a.slow = val;
+      for (const b of ctx.state.buses) b.slow = val;
+      ctx.state.stereo.slow = val;
+      ctx.broadcastState();
+      break;
+    }
+
+    case 'set_studio_settings': {
+      const glide = Math.max(1, Math.min(60, Math.round(cmd.faderGlideDbPerSec * 10) / 10));
+      if (ctx.studioSettingsStorage) {
+        ctx.state.studioSettings = ctx.studioSettingsStorage.update({ faderGlideDbPerSec: glide });
+      } else {
+        ctx.state.studioSettings = { faderGlideDbPerSec: glide };
+      }
+      ctx.broadcastPatch({ studioSettings: ctx.state.studioSettings });
       break;
     }
 

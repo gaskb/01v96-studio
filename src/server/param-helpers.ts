@@ -59,3 +59,49 @@ export function applyCompParam(comp: ChannelCompState, paramIdx: number, val: nu
     case 'threshold': comp.threshold = val; break;
   }
 }
+
+export function extractEQParams(eq: ChannelEQState): Array<[number, number]> {
+  return [
+    [EQ_PARAM_MAP.mode, eq.mode],
+    [EQ_PARAM_MAP.on, eq.on ? 1 : 0],
+    [EQ_PARAM_MAP.hpfOn, eq.hpfOn ? 1 : 0],
+    [EQ_PARAM_MAP.lpfOn, eq.lpfOn ? 1 : 0],
+    [EQ_PARAM_MAP.lowQ, eq.low.q],
+    [EQ_PARAM_MAP.lowF, eq.low.freq],
+    [EQ_PARAM_MAP.lowG, eq.low.gain],
+    [EQ_PARAM_MAP.lowMidQ, eq.lowMid.q],
+    [EQ_PARAM_MAP.lowMidF, eq.lowMid.freq],
+    [EQ_PARAM_MAP.lowMidG, eq.lowMid.gain],
+    [EQ_PARAM_MAP.hiMidQ, eq.hiMid.q],
+    [EQ_PARAM_MAP.hiMidF, eq.hiMid.freq],
+    [EQ_PARAM_MAP.hiMidG, eq.hiMid.gain],
+    [EQ_PARAM_MAP.highQ, eq.high.q],
+    [EQ_PARAM_MAP.highF, eq.high.freq],
+    [EQ_PARAM_MAP.highG, eq.high.gain],
+  ];
+}
+
+export function extractGateParams(gate: ChannelGateState): Array<[number, number]> {
+  return [
+    [GATE_PARAM_MAP.on, gate.on ? 1 : 0],
+    [GATE_PARAM_MAP.type, gate.type],
+    [GATE_PARAM_MAP.attack, gate.attack],
+    [GATE_PARAM_MAP.range, gate.range],
+    [GATE_PARAM_MAP.hold, gate.hold],
+    [GATE_PARAM_MAP.decay, gate.decay],
+    [GATE_PARAM_MAP.threshold, gate.threshold],
+  ];
+}
+
+export function extractCompParams(comp: ChannelCompState): Array<[number, number]> {
+  return [
+    [COMP_PARAM_MAP.on, comp.on ? 1 : 0],
+    [COMP_PARAM_MAP.type, comp.type],
+    [COMP_PARAM_MAP.attack, comp.attack],
+    [COMP_PARAM_MAP.release, comp.release],
+    [COMP_PARAM_MAP.ratio, comp.ratio],
+    [COMP_PARAM_MAP.gain, comp.gain],
+    [COMP_PARAM_MAP.knee, comp.knee],
+    [COMP_PARAM_MAP.threshold, comp.threshold],
+  ];
+}

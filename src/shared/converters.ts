@@ -10,17 +10,42 @@
  * 223  = -30.0 dB
  * 0    = -inf dB
  */
-export function faderToDbString(val: number): string {
-  if (val <= 0) return '-∞ dB';
+/**
+ * Convert 0..1023 10-bit Yamaha fader value to numeric dB (-138 .. +10.0)
+ */
+export function faderToDbNumber(val: number): number {
+  if (val <= 0) return -138;
   if (val >= 423) {
-    const db = (val - 823) / 20;
-    return `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`;
+    return (val - 823) / 20;
   }
   if (val >= 123) {
-    const db = -20 - ((423 - val) / 300) * 30;
-    return `${db.toFixed(1)} dB`;
+    return -20 - ((423 - val) / 300) * 30;
   }
-  const db = -50 - ((123 - val) / 123) * 88;
+  return -50 - ((123 - val) / 123) * 88;
+}
+
+/**
+ * Convert numeric dB (-138 .. +10.0) to 0..1023 Yamaha fader value
+ */
+export function dbNumberToFader(db: number): number {
+  if (db >= 10.0) return 1023;
+  if (db <= -138) return 0;
+  if (db >= -20.0) {
+    return Math.max(0, Math.min(1023, Math.round(db * 20 + 823)));
+  }
+  if (db >= -50.0) {
+    return Math.max(0, Math.min(1023, Math.round(423 + (db + 20) * 10)));
+  }
+  const val = Math.round(123 + (db + 50) * (123 / 88));
+  return Math.max(0, Math.min(1023, val));
+}
+
+export function faderToDbString(val: number): string {
+  if (val <= 0) return '-∞ dB';
+  const db = faderToDbNumber(val);
+  if (val >= 123) {
+    return `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`;
+  }
   return `${db.toFixed(0)} dB`;
 }
 
@@ -32,16 +57,7 @@ export function dbStringToFader(str: string): number {
   if (clean === '-inf' || clean === '-∞' || clean === 'inf' || clean === '-infinity') return 0;
   const db = parseFloat(clean);
   if (isNaN(db)) return 823; // fallback 0.0 dB
-  if (db >= 10.0) return 1023;
-  if (db <= -138) return 0;
-  if (db >= -20.0) {
-    return Math.max(0, Math.min(1023, Math.round(db * 20 + 823)));
-  }
-  if (db >= -50.0) {
-    return Math.max(0, Math.min(1023, Math.round(423 + (db + 20) * 10)));
-  }
-  const val = Math.round(123 + (db + 50) * (123 / 88));
-  return Math.max(0, Math.min(1023, val));
+  return dbNumberToFader(db);
 }
 
 /**

@@ -1,5 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { dbStringToFader, faderToDbString, formatPan } from '../../shared/converters';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  dbNumberToFader,
+  dbStringToFader,
+  faderToDbNumber,
+  faderToDbString,
+  formatPan,
+} from '../../shared/converters';
 
 interface FaderStripProps {
   id: number;
@@ -7,6 +13,8 @@ interface FaderStripProps {
   name: string;
   on: boolean;
   solo?: boolean;
+  slow?: boolean;
+  glideDbPerSec?: number;
   fader: number;
   savedFader?: number;
   pan: number;
@@ -19,6 +27,7 @@ interface FaderStripProps {
   onChangeFader: (val: number) => void;
   onToggleOn: () => void;
   onToggleSolo?: () => void;
+  onToggleSlow?: () => void;
   onChangePan: (val: number) => void;
   onRename?: (newName: string) => void;
 }
@@ -29,6 +38,8 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   name,
   on,
   solo,
+  slow = false,
+  glideDbPerSec = 6,
   fader,
   savedFader,
   pan,
@@ -41,6 +52,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   onChangeFader,
   onToggleOn,
   onToggleSolo,
+  onToggleSlow,
   onChangePan,
   onRename,
 }) => {
@@ -51,6 +63,99 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
   const [editingFader, setEditingFader] = useState(false);
   const [faderDraft, setFaderDraft] = useState('');
   const faderInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Smooth Fader Glide (Slew Rate Limiter) refs
+  const [glideTarget, setGlideTarget] = useState<number | null>(null);
+  const glideTargetRef = useRef<number | null>(null);
+  const currentGlideValRef = useRef<number>(fader);
+  const rafIdRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (rafIdRef.current === null) {
+      currentGlideValRef.current = fader;
+    }
+  }, [fader]);
+
+  const stopGlide = useCallback(() => {
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+    glideTargetRef.current = null;
+    setGlideTarget(null);
+  }, []);
+
+  useEffect(() => {
+    if (!slow) {
+      stopGlide();
+    }
+  }, [slow, stopGlide]);
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, []);
+
+  const triggerFaderTarget = useCallback(
+    (targetVal: number) => {
+      const clampedTarget = Math.max(0, Math.min(1023, Math.round(targetVal)));
+      if (!slow) {
+        onChangeFader(clampedTarget);
+        return;
+      }
+
+      glideTargetRef.current = clampedTarget;
+      setGlideTarget(clampedTarget);
+
+      if (rafIdRef.current !== null) return; // Loop already running, will pick up new target
+
+      lastFrameTimeRef.current = performance.now();
+
+      const step = (now: number) => {
+        const tgt = glideTargetRef.current;
+        if (tgt === null) {
+          rafIdRef.current = null;
+          setGlideTarget(null);
+          return;
+        }
+
+        const dt = Math.min(0.1, Math.max(0.001, (now - lastFrameTimeRef.current) / 1000));
+        lastFrameTimeRef.current = now;
+
+        const curVal = currentGlideValRef.current;
+        const curDb = curVal <= 0 ? -65 : Math.max(-65, faderToDbNumber(curVal));
+        const tgtDb = tgt <= 0 ? -65 : Math.max(-65, faderToDbNumber(tgt));
+        const diffDb = tgtDb - curDb;
+        const maxStepDb = Math.max(1, glideDbPerSec) * dt;
+
+        if (Math.abs(diffDb) <= maxStepDb || Math.abs(tgt - curVal) <= 1) {
+          currentGlideValRef.current = tgt;
+          onChangeFader(tgt);
+          glideTargetRef.current = null;
+          rafIdRef.current = null;
+          setGlideTarget(null);
+          return;
+        }
+
+        const nextDb = curDb + Math.sign(diffDb) * maxStepDb;
+        const nextVal = tgt === 0 && nextDb <= -64.8 ? 0 : dbNumberToFader(nextDb);
+
+        if (nextVal !== curVal) {
+          currentGlideValRef.current = nextVal;
+          onChangeFader(nextVal);
+        }
+
+        rafIdRef.current = requestAnimationFrame(step);
+      };
+
+      rafIdRef.current = requestAnimationFrame(step);
+    },
+    [slow, glideDbPerSec, onChangeFader]
+  );
 
   useEffect(() => {
     if (editingFader && faderInputRef.current) {
@@ -63,15 +168,15 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
     setEditingFader(false);
     if (!faderDraft.trim()) return;
     const targetVal = dbStringToFader(faderDraft);
-    onChangeFader(targetVal);
+    triggerFaderTarget(targetVal);
   };
 
   const resetFader = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (savedFader !== undefined && !e?.shiftKey && !e?.altKey) {
-      onChangeFader(savedFader);
+      triggerFaderTarget(savedFader);
     } else {
-      onChangeFader(823);
+      triggerFaderTarget(823);
     }
   };
 
@@ -92,7 +197,7 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
     const relY = clientY - (rect.top + pad);
     const norm = 1 - Math.max(0, Math.min(1, relY / usableH));
     const val = Math.round(norm * 1023);
-    onChangeFader(val);
+    triggerFaderTarget(val);
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -212,18 +317,37 @@ export const FaderStrip: React.FC<FaderStripProps> = ({
         {on ? 'ON' : 'MUTE'}
       </button>
 
-      {/* SOLO Button */}
-      {onToggleSolo && (
-        <button
-          onClick={onToggleSolo}
-          className={`w-full py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-bold tracking-wider transition cursor-pointer mb-1 ${
-            solo
-              ? 'bg-yellow-400 text-slate-950 shadow-[0_0_10px_rgba(250,204,21,0.6)]'
-              : 'bg-slate-900/70 text-slate-500 border border-slate-800/80 hover:text-slate-300'
-          }`}
-        >
-          SOLO
-        </button>
+      {/* SOLO & SLW (Slow/Glide) Buttons */}
+      {(onToggleSolo || onToggleSlow) && (
+        <div className="w-full flex gap-1 mb-1">
+          {onToggleSolo && (
+            <button
+              onClick={onToggleSolo}
+              className={`flex-1 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-bold tracking-wider transition cursor-pointer ${
+                solo
+                  ? 'bg-yellow-400 text-slate-950 shadow-[0_0_10px_rgba(250,204,21,0.6)]'
+                  : 'bg-slate-900/70 text-slate-500 border border-slate-800/80 hover:text-slate-300'
+              }`}
+            >
+              SOLO
+            </button>
+          )}
+          {onToggleSlow && (
+            <button
+              onClick={onToggleSlow}
+              title={`Slow/Glide Mode (${glideDbPerSec} dB/s max)`}
+              className={`flex-1 py-0.5 rounded text-[8px] sm:text-[9px] font-mono font-bold tracking-wider transition cursor-pointer ${
+                slow
+                  ? glideTarget !== null
+                    ? 'bg-indigo-400 text-slate-950 animate-pulse shadow-[0_0_10px_rgba(129,140,248,0.8)]'
+                    : 'bg-indigo-500 text-white shadow-[0_0_8px_rgba(99,102,241,0.5)]'
+                  : 'bg-slate-900/70 text-slate-500 border border-slate-800/80 hover:text-slate-300'
+              }`}
+            >
+              SLW
+            </button>
+          )}
+        </div>
       )}
 
       {/* Mini Pan Bar (Wheel + Double-Click Reset) */}

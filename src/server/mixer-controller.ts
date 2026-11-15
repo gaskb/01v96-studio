@@ -14,20 +14,32 @@ import { createInitialMixerState } from './default-state.js';
 import { computePostDspMeter } from './dsp-meter-simulator.js';
 import { LayoutStorage } from './layout-storage.js';
 import {
+  extractCompParams,
+  extractEQParams,
+  extractGateParams,
+} from './param-helpers.js';
+import {
   buildMeterRequest,
   buildOutputMeterRequest,
   buildParamChange,
   buildParamRequest,
   buildSceneStoreSysEx,
   COMP_PARAM_MAP,
+  EL_AUX_COMP,
+  EL_AUX_EQ,
   EL_AUX_FADER,
   EL_AUX_ON,
+  EL_AUX_PAN,
+  EL_BUS_COMP,
+  EL_BUS_EQ,
   EL_BUS_FADER,
   EL_BUS_ON,
+  EL_BUS_PAN,
   EL_EFFECT,
   EL_INPUT_ATT,
   EL_INPUT_AUX,
   EL_INPUT_COMP,
+  EL_INPUT_DELAY,
   EL_INPUT_EQ,
   EL_INPUT_FADER,
   EL_INPUT_GATE,
@@ -37,14 +49,18 @@ import {
   EL_INPUT_PHASE,
   EL_INPUT_ROUTING,
   EL_SCENE_TITLE,
+  EL_STEREO_COMP,
+  EL_STEREO_EQ,
   EL_STEREO_FADER,
   EL_STEREO_ON,
+  EL_STEREO_PAN,
   GATE_PARAM_MAP,
   MODEL_01V96,
   MODEL_UNIVERSAL,
 } from './protocol.js';
 import { SceneArchiveStorage } from './scene-archive-storage.js';
 import { SceneLabelsStorage } from './scene-labels-storage.js';
+import { StudioSettingsStorage } from './studio-settings-storage.js';
 import { handleIncomingMidi } from './sysex-inbound-handler.js';
 import { YamahaUsbTransport } from './usb-transport.js';
 
@@ -66,6 +82,7 @@ export class MixerController {
   private channelNameChars: Map<number, string[]> = new Map();
   private labelsStorage: SceneLabelsStorage;
   public archiveStorage: SceneArchiveStorage;
+  public studioSettingsStorage: StudioSettingsStorage;
   private isSyncing = false;
   private pendingSceneResync = false;
   private syncSessionId = 0;
@@ -76,6 +93,8 @@ export class MixerController {
     this.state = createInitialMixerState();
     this.labelsStorage = new SceneLabelsStorage();
     this.archiveStorage = new SceneArchiveStorage();
+    this.studioSettingsStorage = new StudioSettingsStorage();
+    this.state.studioSettings = this.studioSettingsStorage.get();
 
     for (let i = 0; i < 32; i++) {
       this.channelNameChars.set(i, (`CH${i + 1}    `).slice(0, 4).split(''));
@@ -328,6 +347,7 @@ export class MixerController {
       dirtyParams: this.dirtyParams,
       labelsStorage: this.labelsStorage,
       archiveStorage: this.archiveStorage,
+      studioSettingsStorage: this.studioSettingsStorage,
       broadcastChannelUpdate: (target, id, changes) =>
         this.broadcastChannelUpdate(target, id, changes),
       broadcastPatch: (patch) => this.broadcastPatch(patch),
@@ -336,6 +356,7 @@ export class MixerController {
       scheduleSceneResync: () => this.scheduleSceneResync(),
       syncChannelStrip: (id) => this.syncChannelStrip(id),
       initialSync: () => this.initialSync(),
+      pushToHardware: (storeToScene) => this.pushToHardware(storeToScene),
       startDemoWave: (mode) => this.startDemoWave(mode),
       stopDemoWave: () => this.stopDemoWave(),
     });
@@ -627,21 +648,139 @@ export class MixerController {
     };
   }
 
-  private async sendFullStateToHardware(): Promise<void> {
-    if (!this.transport.isConnected()) return;
-    for (const ch of this.state.channels) {
+  public async pushToHardware(storeToScene = false): Promise<boolean> {
+    if (!this.transport.isConnected()) return false;
+    console.log(`📤 Pushing full mixer state to Yamaha 01V96 VCM (Scene #${this.state.sceneNumber})...`);
+    await this.sendFullStateToHardware();
+
+    if (storeToScene) {
+      await this.transport.sendSysEx(buildSceneStoreSysEx(this.state.sceneNumber), 'high');
+      this.dirtyParams.clear();
+      this.state.savedChannels = structuredClone(this.state.channels);
+
+      const chMap: Record<number, string> = {};
+      for (const c of this.state.channels) chMap[c.id] = c.name;
+      const auxMap: Record<number, string> = {};
+      for (const a of this.state.auxes) auxMap[a.id] = a.name;
+      const busMap: Record<number, string> = {};
+      for (const b of this.state.buses) busMap[b.id] = b.name;
+
+      this.labelsStorage.snapshotScene(this.state.sceneNumber, { ch: chMap, aux: auxMap, bus: busMap });
+      this.archiveStorage.archiveScene(this.state.sceneNumber, {
+        number: this.state.sceneNumber,
+        title: this.state.sceneTitle,
+        channels: structuredClone(this.state.channels),
+        auxes: structuredClone(this.state.auxes),
+        buses: structuredClone(this.state.buses),
+        stereo: structuredClone(this.state.stereo),
+        effects: structuredClone(this.state.effects),
+        labels: { ch: chMap, aux: auxMap, bus: busMap },
+      });
+      this.broadcastState();
+    }
+
+    console.log('✅ Full hardware push complete.');
+    return true;
+  }
+
+  private async sendParamBlock(
+    element: number,
+    chIdx: number,
+    params: Array<[number, number]>
+  ): Promise<void> {
+    for (const [paramIdx, val] of params) {
       await this.transport.sendSysEx(
-        buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, ch.id - 1, ch.fader),
-        'high'
-      );
-      await this.transport.sendSysEx(
-        buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, ch.id - 1, ch.on ? 1 : 0),
-        'high'
-      );
-      await this.transport.sendSysEx(
-        buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAN, 0, ch.id - 1, ch.pan),
+        buildParamChange(MODEL_UNIVERSAL, 1, element, paramIdx, chIdx, val),
         'high'
       );
     }
+  }
+
+  private async sendFullStateToHardware(): Promise<void> {
+    if (!this.transport.isConnected()) return;
+
+    // 1. Scene Title (16 chars)
+    const cleanTitle = (this.state.sceneTitle || 'Scene').slice(0, 16).padEnd(16, ' ');
+    for (let p = 0; p < 16; p++) {
+      await this.transport.sendSysEx(
+        buildParamChange(MODEL_UNIVERSAL, 1, EL_SCENE_TITLE, p, 0, cleanTitle.charCodeAt(p)),
+        'high'
+      );
+    }
+
+    // 2. All 32 Input Channels
+    for (const ch of this.state.channels) {
+      const idx = ch.id - 1;
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, idx, ch.fader), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ON, 0, idx, ch.on ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAN, 0, idx, ch.pan), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PHASE, 0, idx, ch.phase ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ATT, 0, idx, ch.att), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_PAIR, 0, idx, ch.pair ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 0, idx, ch.delayOn ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_DELAY, 3, idx, ch.delayTime), 'high');
+
+      await this.sendParamBlock(EL_INPUT_EQ, idx, extractEQParams(ch.eq));
+      await this.sendParamBlock(EL_INPUT_GATE, idx, extractGateParams(ch.gate));
+      await this.sendParamBlock(EL_INPUT_COMP, idx, extractCompParams(ch.comp));
+
+      // Routing
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, 0, idx, ch.routing.stereo ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, 2, idx, ch.routing.direct ? 1 : 0), 'high');
+      for (let b = 0; b < 8; b++) {
+        await this.transport.sendSysEx(
+          buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_ROUTING, 3 + b, idx, ch.routing.bus[b] ? 1 : 0),
+          'high'
+        );
+      }
+
+      // Aux Sends 1..8
+      for (let a = 0; a < 8; a++) {
+        const send = ch.auxSends[a];
+        if (!send) continue;
+        const base = a * 3;
+        await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, base, idx, send.on ? 1 : 0), 'high');
+        await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, base + 1, idx, send.pre ? 1 : 0), 'high');
+        await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_AUX, base + 2, idx, send.level), 'high');
+      }
+
+      // Input Patch & Short Name (4 chars)
+      await this.transport.sendSysEx(buildParamChange(MODEL_01V96, 2, 1, 0, idx, ch.inputPatch), 'high');
+      const shortName = (ch.name || `CH${ch.id}`).slice(0, 4).padEnd(4, ' ');
+      for (let p = 0; p < 4; p++) {
+        await this.transport.sendSysEx(
+          buildParamChange(MODEL_01V96, 2, 4, p, idx, shortName.charCodeAt(p)),
+          'high'
+        );
+      }
+    }
+
+    // 3. AUX 1..8 Masters
+    for (const aux of this.state.auxes) {
+      const idx = aux.id - 1;
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_AUX_FADER, 0, idx, aux.fader), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_AUX_ON, 0, idx, aux.on ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_AUX_PAN, 0, idx, aux.pan), 'high');
+      await this.sendParamBlock(EL_AUX_EQ, idx, extractEQParams(aux.eq));
+      await this.sendParamBlock(EL_AUX_COMP, idx, extractCompParams(aux.comp));
+    }
+
+    // 4. BUS 1..8 Masters
+    for (const bus of this.state.buses) {
+      const idx = bus.id - 1;
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_BUS_FADER, 0, idx, bus.fader), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_BUS_ON, 0, idx, bus.on ? 1 : 0), 'high');
+      await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_BUS_PAN, 0, idx, bus.pan), 'high');
+      await this.sendParamBlock(EL_BUS_EQ, idx, extractEQParams(bus.eq));
+      await this.sendParamBlock(EL_BUS_COMP, idx, extractCompParams(bus.comp));
+    }
+
+    // 5. Stereo Master
+    const st = this.state.stereo;
+    await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_STEREO_FADER, 0, 0, st.fader), 'high');
+    await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_STEREO_ON, 0, 0, st.on ? 1 : 0), 'high');
+    await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_STEREO_PAN, 0, 0, st.pan), 'high');
+    await this.sendParamBlock(EL_STEREO_EQ, 0, extractEQParams(st.eq));
+    await this.sendParamBlock(EL_STEREO_COMP, 0, extractCompParams(st.comp));
   }
 }

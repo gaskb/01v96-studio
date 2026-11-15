@@ -80,7 +80,7 @@ export const ConsoleHeader: React.FC<ConsoleHeaderProps> = ({
           { id: 'channel-overview', label: '🔍 CH STRIP / COPPIA' },
           { id: 'effects-geq', label: '✨ EFFECT & GEQ' },
           { id: 'patch-io', label: '🔌 PATCH / I/O' },
-          { id: 'setup-lcd', label: '⚙️ SETUP & LCD' },
+          { id: 'setup-lcd', label: '⚙️ SETUP & CONF' },
         ].map((v) => (
           <button
             key={v.id}

@@ -226,6 +226,8 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                   compact={layer === 'all32'}
                   on={isAuxFlip ? (auxSendObj?.on ?? true) : ch.on}
                   solo={ch.solo}
+                  slow={ch.slow}
+                  glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
                   fader={isAuxFlip ? (auxSendObj?.level ?? 0) : ch.fader}
                   savedFader={isAuxFlip ? savedAuxSendObj?.level : savedCh?.fader}
                   pan={ch.pan}
@@ -268,6 +270,14 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                       value: !ch.solo,
                     })
                   }
+                  onToggleSlow={() =>
+                    sendCommand({
+                      type: 'set_slow',
+                      target: 'ch',
+                      id: ch.id,
+                      value: !ch.slow,
+                    })
+                  }
                   onChangePan={(val) =>
                     sendCommand({ type: 'set_pan', target: 'ch', id: ch.id, value: val })
                   }
@@ -288,6 +298,8 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                   label={`AUX ${aux.id}`}
                   name={aux.name}
                   on={aux.on}
+                  slow={aux.slow}
+                  glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
                   fader={aux.fader}
                   savedFader={savedAux?.fader}
                   pan={aux.pan}
@@ -301,6 +313,9 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                   }
                   onToggleOn={() =>
                     sendCommand({ type: 'set_on', target: 'aux', id: aux.id, value: !aux.on })
+                  }
+                  onToggleSlow={() =>
+                    sendCommand({ type: 'set_slow', target: 'aux', id: aux.id, value: !aux.slow })
                   }
                   onChangePan={(val) =>
                     sendCommand({ type: 'set_pan', target: 'aux', id: aux.id, value: val })
@@ -322,6 +337,8 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                   label={`BUS ${bus.id}`}
                   name={bus.name}
                   on={bus.on}
+                  slow={bus.slow}
+                  glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
                   fader={bus.fader}
                   savedFader={savedBus?.fader}
                   pan={bus.pan}
@@ -335,6 +352,9 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                   }
                   onToggleOn={() =>
                     sendCommand({ type: 'set_on', target: 'bus', id: bus.id, value: !bus.on })
+                  }
+                  onToggleSlow={() =>
+                    sendCommand({ type: 'set_slow', target: 'bus', id: bus.id, value: !bus.slow })
                   }
                   onChangePan={(val) =>
                     sendCommand({ type: 'set_pan', target: 'bus', id: bus.id, value: val })
@@ -354,6 +374,8 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
             label="STEREO"
             name="MAIN L/R"
             on={state.stereo.on}
+            slow={state.stereo.slow}
+            glideDbPerSec={state.studioSettings?.faderGlideDbPerSec ?? 6}
             fader={state.stereo.fader}
             savedFader={savedState?.stereo.fader}
             pan={state.stereo.pan}
@@ -371,6 +393,14 @@ export const ConsoleFadersView: React.FC<ConsoleFadersViewProps> = ({
                 target: 'stereo',
                 id: 1,
                 value: !state.stereo.on,
+              })
+            }
+            onToggleSlow={() =>
+              sendCommand({
+                type: 'set_slow',
+                target: 'stereo',
+                id: 1,
+                value: !state.stereo.slow,
               })
             }
             onChangePan={(val) =>
