@@ -7,7 +7,9 @@ import {
   RestoreRequest,
   RestoreResult,
   SceneBackupData,
+  SysExPingResult,
   UI_VERSION,
+  UsbDiagnosticsReport,
 } from '../shared/types.js';
 import { dispatchClientCommand } from './command-dispatcher.js';
 import { createInitialMixerState } from './default-state.js';
@@ -86,6 +88,8 @@ export class MixerController {
   private isSyncing = false;
   private pendingSceneResync = false;
   private syncSessionId = 0;
+  private bulkDumpListener: ((msg: number[]) => void) | null = null;
+  private diagnosticMidiListener: ((msg: number[]) => void) | null = null;
 
   constructor(broadcastCallback: (msg: unknown) => void) {
     this.broadcastCallback = broadcastCallback;
@@ -95,6 +99,7 @@ export class MixerController {
     this.archiveStorage = new SceneArchiveStorage();
     this.studioSettingsStorage = new StudioSettingsStorage();
     this.state.studioSettings = this.studioSettingsStorage.get();
+    this.transport.setDefaultCable(this.state.studioSettings.usbCable ?? 0);
 
     for (let i = 0; i < 32; i++) {
       this.channelNameChars.set(i, (`CH${i + 1}    `).slice(0, 4).split(''));
@@ -323,6 +328,28 @@ export class MixerController {
   }
 
   public handleIncomingMidi(msg: number[]): void {
+    if (
+      msg.length >= 6 &&
+      msg[0] === 0xf0 &&
+      msg[1] === 0x43 &&
+      !(msg[4] === MODEL_01V96 && msg[5] === 0x21)
+    ) {
+      if (this.bulkDumpListener) {
+        this.bulkDumpListener(msg);
+      }
+      if (this.diagnosticMidiListener) {
+        this.diagnosticMidiListener(msg);
+      }
+    }
+    if (
+      msg.length >= 6 &&
+      msg[0] === 0xf0 &&
+      msg[1] === 0x43 &&
+      (msg[2] & 0xf0) === 0x00 &&
+      msg[3] === 0x7e
+    ) {
+      return;
+    }
     handleIncomingMidi(msg, {
       state: this.state,
       dirtyParams: this.dirtyParams,
@@ -782,5 +809,261 @@ export class MixerController {
     await this.transport.sendSysEx(buildParamChange(MODEL_UNIVERSAL, 1, EL_STEREO_PAN, 0, 0, st.pan), 'high');
     await this.sendParamBlock(EL_STEREO_EQ, 0, extractEQParams(st.eq));
     await this.sendParamBlock(EL_STEREO_COMP, 0, extractCompParams(st.comp));
+  }
+
+  public async debugCaptureBulkDump(
+    sceneNumber: number,
+    variant: string = 'spaceS',
+    timeoutMs = 1500,
+    cable = 0
+  ): Promise<{
+    connected: boolean;
+    requestHex: string;
+    packetCount: number;
+    totalBytes: number;
+    packets: Array<{ length: number; headerAscii: string; hexPreview: string }>;
+  }> {
+    if (!this.transport.isConnected()) {
+      return { connected: false, requestHex: '', packetCount: 0, totalBytes: 0, packets: [] };
+    }
+
+    const mh = (sceneNumber >> 7) & 0x7f;
+    const ml = sceneNumber & 0x7f;
+    // LM  8C93 = [0x4c, 0x4d, 0x20, 0x20, 0x38, 0x43, 0x39, 0x33]
+    const lmHeader = [0x4c, 0x4d, 0x20, 0x20, 0x38, 0x43, 0x39, 0x33];
+    let req: number[];
+    if (variant === 'm00') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x6d, 0x00, ml, 0xf7];
+    } else if (variant === 'm00_le') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x6d, 0x00, ml, mh, 0xf7];
+    } else if (variant === 'm00_short') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x6d, 0x00, 0xf7];
+    } else if (variant === 'spaceS') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x20, 0x53, mh, ml, 0xf7];
+    } else if (variant === 'Mspace') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x4d, 0x20, mh, ml, 0xf7];
+    } else if (variant === 'spaceM') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x20, 0x4d, mh, ml, 0xf7];
+    } else if (variant === 'listen') {
+      req = [];
+    } else if (variant === 'spaceQ') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x20, 0x51, mh, ml, 0xf7];
+    } else if (variant === 'spaceR') {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, 0x20, 0x52, mh, ml, 0xf7];
+    } else if (variant === '3e0d') {
+      req = [0xf0, 0x43, 0x20, 0x3e, 0x0d, 0x00, mh, ml, 0xf7];
+    } else {
+      req = [0xf0, 0x43, 0x20, 0x7e, ...lmHeader, mh, ml, 0xf7];
+    }
+
+    const captured: number[][] = [];
+    const result = await new Promise<{
+      packetCount: number;
+      totalBytes: number;
+      packets: Array<{ length: number; headerAscii: string; hexPreview: string }>;
+    }>((resolve) => {
+      let idleTimer: NodeJS.Timeout | null = null;
+      const finish = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        clearTimeout(maxTimer);
+        this.bulkDumpListener = null;
+        const packets = captured.map((pkt) => ({
+          length: pkt.length,
+          headerAscii: pkt
+            .slice(6, 16)
+            .map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.'))
+            .join(''),
+          hexPreview: pkt
+            .slice(0, 48)
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join(' '),
+          fullHex: pkt.map((b) => b.toString(16).padStart(2, '0')).join(' '),
+        }));
+        resolve({
+          packetCount: captured.length,
+          totalBytes: captured.reduce((acc, p) => acc + p.length, 0),
+          packets,
+        });
+      };
+
+      const maxTimer = setTimeout(finish, timeoutMs);
+      this.bulkDumpListener = (pkt: number[]) => {
+        if (pkt.length === 7 && pkt[4] === 0x0d && pkt[5] === 0x7f) return; // ignore heartbeat
+        captured.push(pkt);
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(finish, 800);
+      };
+
+      if (req.length > 0) {
+        this.transport.sendSysEx(req, 'high', cable);
+      }
+    });
+
+    return {
+      connected: true,
+      requestHex: req.map((b) => b.toString(16).padStart(2, '0')).join(' '),
+      ...result,
+    };
+  }
+
+  public getUsbDiagnostics(): UsbDiagnosticsReport {
+    return this.transport.getDiagnostics(this.state.studioSettings.midiChannel ?? 1);
+  }
+
+  public async reconnectUsb(
+    pidOverride?: number
+  ): Promise<{ connected: boolean; report: UsbDiagnosticsReport }> {
+    if (this.transport.isConnected()) {
+      this.transport.disconnect();
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    const ok = this.transport.connect(pidOverride);
+    if (ok) {
+      this.initialSync();
+    }
+    return {
+      connected: ok,
+      report: this.getUsbDiagnostics(),
+    };
+  }
+
+  private async probeSingleSysEx(
+    cable: number,
+    midiChannel: number,
+    timeoutMs: number
+  ): Promise<{ ok: boolean; latencyMs: number | null; responses: number[][] }> {
+    const startedAt = Date.now();
+    const responses: number[][] = [];
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      const done = (ok: boolean) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timer);
+        this.diagnosticMidiListener = null;
+        resolve({
+          ok,
+          latencyMs: ok ? Math.max(1, Date.now() - startedAt) : null,
+          responses,
+        });
+      };
+
+      const timer = setTimeout(() => done(false), timeoutMs);
+
+      this.diagnosticMidiListener = (pkt: number[]) => {
+        // Ignore Yamaha keepalive heartbeat (F0 43 10 3E 0D 7F F7)
+        if (pkt.length === 7 && pkt[4] === MODEL_01V96 && pkt[5] === 0x7f) return;
+        responses.push(pkt);
+        done(true);
+      };
+
+      // Lightweight read-only Parameter Request: Input CH1 Fader (Element 28, Param 0, Ch 0)
+      const req = buildParamRequest(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, 0, midiChannel);
+      this.transport.sendSysEx(req, 'high', cable);
+    });
+  }
+
+  public async pingMixer(options?: {
+    cable?: number;
+    midiChannel?: number;
+    autoProbe?: boolean;
+    timeoutMs?: number;
+  }): Promise<SysExPingResult> {
+    const cable = Math.max(0, Math.min(7, Math.round(options?.cable ?? this.state.studioSettings.usbCable ?? 0)));
+    const midiChannel = Math.max(
+      1,
+      Math.min(16, Math.round(options?.midiChannel ?? this.state.studioSettings.midiChannel ?? 1))
+    );
+    const timeoutMs = Math.max(200, Math.min(4000, Math.round(options?.timeoutMs ?? 1000)));
+
+    if (!this.transport.isConnected()) {
+      return {
+        ok: false,
+        usbConnected: false,
+        latencyMs: null,
+        cable,
+        midiChannel,
+        responsesReceived: 0,
+        sampleHex: [],
+        diagnosis:
+          'Connessione USB non attiva: impossibile inviare il ping SysEx. Risolvi prima il rilevamento USB.',
+      };
+    }
+
+    const first = await this.probeSingleSysEx(cable, midiChannel, timeoutMs);
+    if (first.ok) {
+      return {
+        ok: true,
+        usbConnected: true,
+        latencyMs: first.latencyMs,
+        cable,
+        midiChannel,
+        responsesReceived: first.responses.length,
+        sampleHex: first.responses
+          .slice(0, 3)
+          .map((r) => r.map((b) => b.toString(16).padStart(2, '0')).join(' ')),
+        diagnosis: `Mixer raggiungibile! Risposta SysEx ricevuta in ${first.latencyMs} ms su USB Port ${cable + 1}, MIDI Ch ${midiChannel}.`,
+      };
+    }
+
+    if (options?.autoProbe) {
+      const probeTimeout = Math.min(300, timeoutMs);
+      // Probe other USB cables (0..7) on the requested MIDI channel
+      for (let c = 0; c < 8; c++) {
+        if (c === cable) continue;
+        const res = await this.probeSingleSysEx(c, midiChannel, probeTimeout);
+        if (res.ok) {
+          return {
+            ok: true,
+            usbConnected: true,
+            latencyMs: res.latencyMs,
+            cable,
+            midiChannel,
+            responsesReceived: res.responses.length,
+            sampleHex: res.responses
+              .slice(0, 3)
+              .map((r) => r.map((b) => b.toString(16).padStart(2, '0')).join(' ')),
+            detectedCable: c,
+            detectedMidiChannel: midiChannel,
+            diagnosis: `Mixer trovato su USB Port ${c + 1} (invece di Port ${cable + 1})! Imposta USB Port = ${c + 1} qui sotto oppure imposta GENERAL = USB 1 in DIO/SETUP → MIDI/HOST sul mixer.`,
+          };
+        }
+      }
+
+      // Probe other MIDI channels (1..16) on the requested USB cable
+      for (let ch = 1; ch <= 16; ch++) {
+        if (ch === midiChannel) continue;
+        const res = await this.probeSingleSysEx(cable, ch, probeTimeout);
+        if (res.ok) {
+          return {
+            ok: true,
+            usbConnected: true,
+            latencyMs: res.latencyMs,
+            cable,
+            midiChannel,
+            responsesReceived: res.responses.length,
+            sampleHex: res.responses
+              .slice(0, 3)
+              .map((r) => r.map((b) => b.toString(16).padStart(2, '0')).join(' ')),
+            detectedCable: cable,
+            detectedMidiChannel: ch,
+            diagnosis: `Mixer trovato su MIDI Channel ${ch} (invece di Ch ${midiChannel})! Verifica MIDI → SETUP sul mixer o aggiorna il canale MIDI.`,
+          };
+        }
+      }
+    }
+
+    return {
+      ok: false,
+      usbConnected: true,
+      latencyMs: null,
+      cable,
+      midiChannel,
+      responsesReceived: 0,
+      sampleHex: [],
+      diagnosis:
+        'USB connessa, ma il mixer non risponde ai comandi SysEx. Sul mixer controlla: 1) DIO/SETUP → MIDI/HOST: GENERAL / STUDIO MANAGER = USB (Port 1); 2) MIDI → SETUP: TX/RX CH = 1 e PARAMETER CHANGE TX/RX = ON.',
+    };
   }
 }

@@ -1,7 +1,199 @@
+import fs from 'fs';
 import * as usb from 'usb';
+import {
+  APP_VERSION,
+  DiagnosticHint,
+  UsbDeviceInfo,
+  UsbDiagnosticsReport,
+} from '../shared/types.js';
 
 export const YAMAHA_VID = 0x0499;
 export const YAMAHA_01V96_PID = 0x5008;
+
+export const KNOWN_YAMAHA_MIXER_PIDS: Record<number, string> = {
+  0x5008: 'Yamaha 01V96 / 01V96V2 / 01V96 VCM',
+  0x1509: 'Yamaha 01V96i (USB Audio/MIDI)',
+};
+
+export function formatHexId(id: number): string {
+  return `0x${(id & 0xffff).toString(16).padStart(4, '0')}`;
+}
+
+export function detectDocker(): boolean {
+  try {
+    if (process.env.CONTAINER === 'docker' || process.env.DOCKER === 'true') {
+      return true;
+    }
+    return fs.existsSync('/.dockerenv');
+  } catch {
+    return false;
+  }
+}
+
+export function extractLibUsbErrorCode(errMsg: string | null): string | null {
+  if (!errMsg) return null;
+  const match = errMsg.match(/LIBUSB_[A-Z0-9_]+/);
+  if (match) return match[0];
+  if (errMsg.toLowerCase().includes('no_device') || errMsg.toLowerCase().includes('not found')) {
+    return 'NO_DEVICE';
+  }
+  if (errMsg.toLowerCase().includes('endpoints')) {
+    return 'NO_ENDPOINTS';
+  }
+  return 'USB_ERROR';
+}
+
+export interface UsbScanResult {
+  totalUsbDevices: number;
+  yamahaDevices: UsbDeviceInfo[];
+  scanError?: string;
+}
+
+export function scanUsbDevices(
+  deviceListProvider: () => usb.Device[] = () => usb.getDeviceList()
+): UsbScanResult {
+  try {
+    const devices = deviceListProvider();
+    const yamahaDevices: UsbDeviceInfo[] = [];
+
+    for (const dev of devices) {
+      const desc = dev.deviceDescriptor;
+      if (!desc) continue;
+      const vidNum = desc.idVendor;
+      const pidNum = desc.idProduct;
+      const isYamaha = vidNum === YAMAHA_VID;
+      if (!isYamaha) continue;
+
+      let interfaceCount = 0;
+      const endpointsSummary: string[] = [];
+      try {
+        const cfg = dev.configDescriptor;
+        if (cfg && Array.isArray(cfg.interfaces)) {
+          interfaceCount = cfg.interfaces.length;
+          cfg.interfaces.forEach((altSettings, ifaceIdx) => {
+            const firstAlt = altSettings?.[0];
+            if (!firstAlt) return;
+            const eps = (firstAlt.endpoints || []).map((ep) => {
+              const dir = (ep.bEndpointAddress & 0x80) !== 0 ? 'IN' : 'OUT';
+              return `ep0x${ep.bEndpointAddress.toString(16)}(${dir})`;
+            });
+            endpointsSummary.push(
+              `if#${ifaceIdx} cls=0x${firstAlt.bInterfaceClass.toString(16)}/sub=0x${firstAlt.bInterfaceSubClass.toString(16)} [${eps.join(', ')}]`
+            );
+          });
+        }
+      } catch {
+        // Descriptor inspection may fail on locked devices; still report VID/PID
+      }
+
+      const matchedModel = KNOWN_YAMAHA_MIXER_PIDS[pidNum] ?? null;
+      yamahaDevices.push({
+        vid: formatHexId(vidNum),
+        pid: formatHexId(pidNum),
+        vidNum,
+        pidNum,
+        busNumber: dev.busNumber ?? 0,
+        deviceAddress: dev.deviceAddress ?? 0,
+        isYamaha: true,
+        isKnown01V96: pidNum === YAMAHA_01V96_PID,
+        matchedModel,
+        interfaceCount,
+        endpointsSummary,
+      });
+    }
+
+    return {
+      totalUsbDevices: devices.length,
+      yamahaDevices,
+    };
+  } catch (err) {
+    return {
+      totalUsbDevices: 0,
+      yamahaDevices: [],
+      scanError: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function buildDiagnosticHints(params: {
+  platform: string;
+  inDocker: boolean;
+  connected: boolean;
+  totalUsbDevices: number;
+  yamahaDevices: UsbDeviceInfo[];
+  lastError: string | null;
+  lastErrorCode: string | null;
+}): DiagnosticHint[] {
+  const hints: DiagnosticHint[] = [];
+  const { platform, inDocker, connected, totalUsbDevices, yamahaDevices, lastErrorCode } = params;
+
+  if (connected) {
+    hints.push({
+      severity: 'ok',
+      title: 'Connessione USB attiva',
+      detail:
+        'Il mixer è collegato e aperto via libusb. Se i fader o i meter non rispondono, usa "Testa Handshake SysEx" per verificare DIO/SETUP → MIDI/HOST e MIDI → SETUP sul mixer.',
+    });
+    return hints;
+  }
+
+  if (inDocker && totalUsbDevices === 0) {
+    hints.push({
+      severity: 'error',
+      title: 'Container Docker senza accesso USB',
+      detail:
+        'Nessun dispositivo USB visibile nel container. Su macOS/Windows Docker Desktop non supporta il passthrough USB: avvia 01V96 Studio nativamente con "npm start". Su Linux verifica "privileged: true" e "/dev/bus/usb:/dev/bus/usb" in docker-compose.yml.',
+    });
+  }
+
+  if (lastErrorCode === 'LIBUSB_ERROR_ACCESS' || lastErrorCode === 'LIBUSB_ERROR_BUSY') {
+    if (platform === 'darwin') {
+      hints.push({
+        severity: 'error',
+        title: 'Conflitto driver Yamaha USB-MIDI / CoreMIDI su macOS',
+        detail:
+          'macOS o il driver ufficiale Yamaha USB-MIDI ha già impegnato la porta USB del mixer, bloccando l\'accesso diretto di libusb (LIBUSB_ERROR_ACCESS). Chiudi Studio Manager / DAW aperte; se il driver Yamaha USB-MIDI è installato in /Library/Audio/MIDI Drivers/, macOS aggancia automaticamente il mixer impedendo il claim via libusb.',
+      });
+    } else if (platform === 'linux') {
+      hints.push({
+        severity: 'error',
+        title: 'Permessi USB insufficienti su Linux',
+        detail:
+          'Aggiungi la regola udev (/etc/udev/rules.d/99-yamaha-01v96.rules con MODE="0666", GROUP="audio") e verifica che l\'utente appartenga ai gruppi audio e plugdev.',
+      });
+    } else {
+      hints.push({
+        severity: 'error',
+        title: 'Accesso USB negato dal sistema operativo',
+        detail:
+          'Un altro programma o driver di sistema sta bloccando il dispositivo USB (LIBUSB_ERROR_ACCESS/BUSY). Chiudi Studio Manager o altre app MIDI.',
+      });
+    }
+  }
+
+  const hasClassic01V96 = yamahaDevices.some((d) => d.pidNum === YAMAHA_01V96_PID);
+  const otherYamaha = yamahaDevices.filter((d) => d.pidNum !== YAMAHA_01V96_PID);
+
+  if (!hasClassic01V96 && otherYamaha.length > 0) {
+    const pids = otherYamaha.map((d) => `${d.pid}${d.matchedModel ? ` (${d.matchedModel})` : ''}`).join(', ');
+    hints.push({
+      severity: 'warn',
+      title: 'Rilevato dispositivo Yamaha con PID diverso da 0x5008',
+      detail: `Trovato: ${pids}. Lo 01V96 / V2 / VCM usa PID 0x5008; modelli come 01V96i usano un PID diverso. Puoi provare a connetterti selezionando il dispositivo rilevato qui sotto.`,
+    });
+  }
+
+  if (yamahaDevices.length === 0 && !(inDocker && totalUsbDevices === 0)) {
+    hints.push({
+      severity: 'warn',
+      title: 'Nessun dispositivo Yamaha (VID 0x0499) rilevato dal sistema',
+      detail:
+        'Il sistema operativo non vede alcun mixer Yamaha sulla porta USB. Verifica che il mixer sia acceso, controlla il cavo USB Type-B e — su Mac USB-C — prova un adattatore o cavo USB-B→USB-C diretto bypassando hub multiporta economici.',
+    });
+  }
+
+  return hints;
+}
 
 /**
  * Encodes a raw MIDI / SysEx byte array into 4-byte USB-MIDI 1.0 Event Packets
@@ -123,6 +315,13 @@ export class YamahaUsbTransport {
   private lowQueue: QueueItem[] = [];
   private isProcessingQueue = false;
   private readonly PACING_MS = 1;
+  private defaultCable = 0;
+  private targetPid = YAMAHA_01V96_PID;
+  private activePid: number | null = null;
+  private activeInterfaceIndex: number | null = null;
+  private lastError: string | null = null;
+  private lastErrorCode: string | null = null;
+  private lastAttemptAt: string | null = null;
 
   onMessage(cb: (msg: number[]) => void): void {
     this.onMessageCallback = cb;
@@ -136,26 +335,82 @@ export class YamahaUsbTransport {
     return this.connected;
   }
 
-  connect(): boolean {
+  getDefaultCable(): number {
+    return this.defaultCable;
+  }
+
+  setDefaultCable(cable: number): void {
+    if (Number.isInteger(cable) && cable >= 0 && cable <= 7) {
+      this.defaultCable = cable;
+    }
+  }
+
+  getLastError(): { message: string | null; code: string | null; at: string | null } {
+    return {
+      message: this.lastError,
+      code: this.lastErrorCode,
+      at: this.lastAttemptAt,
+    };
+  }
+
+  connect(pidOverride?: number): boolean {
+    this.lastAttemptAt = new Date().toISOString();
+    if (typeof pidOverride === 'number' && Number.isInteger(pidOverride) && pidOverride > 0) {
+      this.targetPid = pidOverride;
+    }
+    const pid = this.targetPid;
+
     try {
-      const dev = usb.findByIds(YAMAHA_VID, YAMAHA_01V96_PID);
+      const dev = usb.findByIds(YAMAHA_VID, pid);
       if (!dev) {
+        this.lastError = `Yamaha USB device (${formatHexId(YAMAHA_VID)}:${formatHexId(pid)}) not found`;
+        this.lastErrorCode = 'NO_DEVICE';
         this.setConnected(false);
         return false;
       }
 
       dev.open();
-      const iface = dev.interface(0);
+
+      // Locate an interface that exposes both IN and OUT bulk/interrupt endpoints
+      // (interface 0 for classic 01V96/V2/VCM; higher index on composite devices like 01V96i)
+      const allIfaces = dev.interfaces ?? [dev.interface(0)];
+      let chosenIface: usb.Interface | null = null;
+      let chosenIfaceIdx = 0;
+      let outEp: usb.OutEndpoint | undefined;
+      let inEp: usb.InEndpoint | undefined;
+
+      for (let idx = 0; idx < allIfaces.length; idx++) {
+        const candidate = allIfaces[idx];
+        const cOut = candidate.endpoints.find((e): e is usb.OutEndpoint => e.direction === 'out');
+        const cIn = candidate.endpoints.find((e): e is usb.InEndpoint => e.direction === 'in');
+        if (cOut && cIn) {
+          chosenIface = candidate;
+          chosenIfaceIdx = candidate.interfaceNumber ?? idx;
+          outEp = cOut;
+          inEp = cIn;
+          break;
+        }
+      }
+
+      if (!chosenIface || !outEp || !inEp) {
+        try {
+          dev.close();
+        } catch {
+          // ignore
+        }
+        throw new Error(`Could not find USB IN/OUT endpoints on ${formatHexId(YAMAHA_VID)}:${formatHexId(pid)}`);
+      }
+
       try {
-        if (process.platform === 'linux' && iface.isKernelDriverActive()) {
-          iface.detachKernelDriver();
+        if (process.platform === 'linux' && chosenIface.isKernelDriverActive()) {
+          chosenIface.detachKernelDriver();
         }
       } catch {
         // Ignore on macOS
       }
 
       try {
-        iface.claim();
+        chosenIface.claim();
       } catch (claimErr) {
         try {
           dev.close();
@@ -165,27 +420,14 @@ export class YamahaUsbTransport {
         throw claimErr;
       }
 
-      const outEp = iface.endpoints.find((e): e is usb.OutEndpoint => e.direction === 'out');
-      const inEp = iface.endpoints.find((e): e is usb.InEndpoint => e.direction === 'in');
-
-      if (!outEp || !inEp) {
-        try {
-          iface.release(true, () => {});
-        } catch {
-          // ignore
-        }
-        try {
-          dev.close();
-        } catch {
-          // ignore
-        }
-        throw new Error('Could not find USB bulk IN/OUT endpoints on 01V96');
-      }
-
       this.device = dev;
-      this.iface = iface;
+      this.iface = chosenIface;
       this.outEndpoint = outEp;
       this.inEndpoint = inEp;
+      this.activePid = pid;
+      this.activeInterfaceIndex = chosenIfaceIdx;
+      this.lastError = null;
+      this.lastErrorCode = null;
       outEp.timeout = 500;
 
       inEp.on('data', (data: Buffer) => {
@@ -197,6 +439,8 @@ export class YamahaUsbTransport {
       inEp.on('error', (err) => {
         console.error('[USB IN Error]', err?.message || err);
         const errMsg = err?.message || '';
+        this.lastError = errMsg || 'USB IN error';
+        this.lastErrorCode = extractLibUsbErrorCode(errMsg);
         if (
           errMsg.includes('LIBUSB_ERROR_NO_DEVICE') ||
           errMsg.includes('LIBUSB_ERROR_NOT_FOUND') ||
@@ -224,13 +468,71 @@ export class YamahaUsbTransport {
 
       inEp.startPoll(3, 64);
       this.setConnected(true);
-      console.log('✅ Connected directly via USB to YAMAHA 01V96 VCM (0x0499:0x5008)');
+      const modelName = KNOWN_YAMAHA_MIXER_PIDS[pid] ?? `Yamaha USB (${formatHexId(pid)})`;
+      console.log(
+        `✅ Connected directly via USB to ${modelName} (${formatHexId(YAMAHA_VID)}:${formatHexId(pid)}, if#${chosenIfaceIdx})`
+      );
       return true;
     } catch (err) {
-      console.warn('⚠️ Could not open Yamaha 01V96 USB device:', (err as Error).message);
+      const msg = (err as Error).message || String(err);
+      this.lastError = msg;
+      this.lastErrorCode = extractLibUsbErrorCode(msg);
+      console.warn('⚠️ Could not open Yamaha 01V96 USB device:', msg);
       this.setConnected(false);
       return false;
     }
+  }
+
+  getDiagnostics(
+    midiChannel = 1,
+    deviceListProvider?: () => usb.Device[]
+  ): UsbDiagnosticsReport {
+    const scan = scanUsbDevices(deviceListProvider);
+    const inDocker = detectDocker();
+    const platform = process.platform;
+    const effectiveLastError = this.lastError ?? scan.scanError ?? null;
+    const effectiveErrorCode =
+      this.lastErrorCode ?? (scan.scanError ? extractLibUsbErrorCode(scan.scanError) : null);
+
+    const activeDevice =
+      this.connected && this.activePid !== null
+        ? {
+            vid: formatHexId(YAMAHA_VID),
+            pid: formatHexId(this.activePid),
+            model: KNOWN_YAMAHA_MIXER_PIDS[this.activePid] ?? `Yamaha USB (${formatHexId(this.activePid)})`,
+            interfaceIndex: this.activeInterfaceIndex ?? 0,
+            cable: this.defaultCable,
+            midiChannel,
+          }
+        : null;
+
+    const hints = buildDiagnosticHints({
+      platform,
+      inDocker,
+      connected: this.connected,
+      totalUsbDevices: scan.totalUsbDevices,
+      yamahaDevices: scan.yamahaDevices,
+      lastError: effectiveLastError,
+      lastErrorCode: effectiveErrorCode,
+    });
+
+    return {
+      timestamp: new Date().toISOString(),
+      platform,
+      arch: process.arch,
+      nodeVersion: process.version,
+      inDocker,
+      appVersion: APP_VERSION,
+      connected: this.connected,
+      connectionMode: this.connected ? 'usb-direct' : 'simulated',
+      activeDevice,
+      lastError: effectiveLastError,
+      lastErrorCode: effectiveErrorCode,
+      lastAttemptAt: this.lastAttemptAt,
+      totalUsbDevices: scan.totalUsbDevices,
+      yamahaDevices: scan.yamahaDevices,
+      hints,
+    };
   }
 
   getQueueLength(): number {
@@ -251,13 +553,17 @@ export class YamahaUsbTransport {
     }
   }
 
-  sendSysEx(sysex: number[], priority: 'high' | 'low' = 'high'): Promise<void> {
+  sendSysEx(
+    sysex: number[],
+    priority: 'high' | 'low' = 'high',
+    cable: number = this.defaultCable
+  ): Promise<void> {
     return new Promise((resolve) => {
       if (!this.connected || !this.outEndpoint) {
         resolve();
         return;
       }
-      const packet = encodeSysExToUsbMidi(sysex, 0);
+      const packet = encodeSysExToUsbMidi(sysex, cable);
       // Split into 64-byte chunks if larger than maxPacketSize
       const chunks: Buffer[] = [];
       for (let i = 0; i < packet.length; i += 64) {
@@ -376,6 +682,8 @@ export class YamahaUsbTransport {
       this.iface = null;
       this.outEndpoint = null;
       this.inEndpoint = null;
+      this.activePid = null;
+      this.activeInterfaceIndex = null;
       this.setConnected(false);
     }
   }

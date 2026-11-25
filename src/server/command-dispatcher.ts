@@ -808,11 +808,26 @@ export async function dispatchClientCommand(
     }
 
     case 'set_studio_settings': {
-      const glide = Math.max(1, Math.min(60, Math.round(cmd.faderGlideDbPerSec * 10) / 10));
+      const partial: Partial<typeof ctx.state.studioSettings> = {};
+      if (cmd.faderGlideDbPerSec !== undefined) {
+        partial.faderGlideDbPerSec = Math.max(
+          1,
+          Math.min(60, Math.round(cmd.faderGlideDbPerSec * 10) / 10)
+        );
+      }
+      if (cmd.usbCable !== undefined) {
+        partial.usbCable = Math.max(0, Math.min(7, Math.round(cmd.usbCable)));
+      }
+      if (cmd.midiChannel !== undefined) {
+        partial.midiChannel = Math.max(1, Math.min(16, Math.round(cmd.midiChannel)));
+      }
       if (ctx.studioSettingsStorage) {
-        ctx.state.studioSettings = ctx.studioSettingsStorage.update({ faderGlideDbPerSec: glide });
+        ctx.state.studioSettings = ctx.studioSettingsStorage.update(partial);
       } else {
-        ctx.state.studioSettings = { faderGlideDbPerSec: glide };
+        ctx.state.studioSettings = { ...ctx.state.studioSettings, ...partial };
+      }
+      if (partial.usbCable !== undefined) {
+        ctx.transport.setDefaultCable(ctx.state.studioSettings.usbCable ?? 0);
       }
       ctx.broadcastPatch({ studioSettings: ctx.state.studioSettings });
       break;

@@ -67,12 +67,14 @@ export function buildParamRequest(
   dataType: number,
   element: number,
   param: number,
-  channel: number
+  channel: number,
+  midiChannel = 1
 ): number[] {
+  const chOffset = Math.max(0, Math.min(15, Math.round(midiChannel) - 1));
   return [
     SYSEX_START,
     YAMAHA_ID,
-    SUB_PARAM_REQUEST,
+    SUB_PARAM_REQUEST | chOffset,
     GROUP_DIGITAL_MIXER,
     modelId,
     dataType,

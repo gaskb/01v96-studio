@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ClientCommand, MixerState } from '../../shared/types';
+import { MixerDiagnosticsCard } from './MixerDiagnosticsCard';
 
 interface SystemMenusPanelProps {
   mode: 'effects-geq' | 'patch-io' | 'setup-lcd';
@@ -377,6 +378,8 @@ export const SystemMenusPanel: React.FC<SystemMenusPanelProps> = ({
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto p-1">
       {/* Studio Configuration & Offline Workflow Panel */}
+      <MixerDiagnosticsCard state={state} sendCommand={sendCommand} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Studio Fader Glide / Slow Speed Config */}
         <div className="bg-[#0c1018] border border-indigo-500/30 rounded-2xl p-4 flex flex-col gap-3">

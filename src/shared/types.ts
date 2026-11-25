@@ -1,6 +1,6 @@
-export const APP_VERSION = '0.8.0';
-export const UI_VERSION = '0.8.0';
-export const API_VERSION = '0.8.0';
+export const APP_VERSION = '0.9.0';
+export const UI_VERSION = '0.9.0';
+export const API_VERSION = '0.9.0';
 
 export type ControlMode = 'knobs' | 'sliders';
 
@@ -135,6 +135,66 @@ export interface MixerSetupState {
 
 export interface StudioSettings {
   faderGlideDbPerSec: number; // Max fader slew rate in dB/sec when SLOW mode is active (1..60)
+  usbCable?: number;          // USB-MIDI cable / port index (0..7 => USB Port 1..8, default 0)
+  midiChannel?: number;       // Yamaha SysEx Device ID / MIDI Channel (1..16, default 1)
+}
+
+export interface UsbDeviceInfo {
+  vid: string;
+  pid: string;
+  vidNum: number;
+  pidNum: number;
+  busNumber: number;
+  deviceAddress: number;
+  isYamaha: boolean;
+  isKnown01V96: boolean;
+  matchedModel: string | null;
+  interfaceCount: number;
+  endpointsSummary: string[];
+}
+
+export interface DiagnosticHint {
+  severity: 'error' | 'warn' | 'info' | 'ok';
+  title: string;
+  detail: string;
+}
+
+export interface UsbDiagnosticsReport {
+  timestamp: string;
+  platform: string;
+  arch: string;
+  nodeVersion: string;
+  inDocker: boolean;
+  appVersion: string;
+  connected: boolean;
+  connectionMode: 'usb-direct' | 'simulated';
+  activeDevice: {
+    vid: string;
+    pid: string;
+    model: string;
+    interfaceIndex: number;
+    cable: number;
+    midiChannel: number;
+  } | null;
+  lastError: string | null;
+  lastErrorCode: string | null;
+  lastAttemptAt: string | null;
+  totalUsbDevices: number;
+  yamahaDevices: UsbDeviceInfo[];
+  hints: DiagnosticHint[];
+}
+
+export interface SysExPingResult {
+  ok: boolean;
+  usbConnected: boolean;
+  latencyMs: number | null;
+  cable: number;
+  midiChannel: number;
+  responsesReceived: number;
+  sampleHex: string[];
+  diagnosis: string;
+  detectedCable?: number;
+  detectedMidiChannel?: number;
 }
 
 export interface MixerState {

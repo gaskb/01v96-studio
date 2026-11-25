@@ -162,7 +162,79 @@ export function createServer(port = Number(process.env.PORT) || 8096, customLayo
     }
   });
 
+  // USB & Mixer Diagnostics APIs
+  app.get('/api/diagnostics/usb', (_req, res) => {
+    try {
+      res.json(mixer.getUsbDiagnostics());
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/diagnostics/reconnect', async (req, res) => {
+    try {
+      const rawPid = req.body?.pidOverride;
+      let pidOverride: number | undefined;
+      if (rawPid !== undefined && rawPid !== null && rawPid !== '') {
+        const parsed =
+          typeof rawPid === 'string' && rawPid.startsWith('0x')
+            ? parseInt(rawPid, 16)
+            : Number(rawPid);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 0xffff) {
+          res.status(400).json({ error: 'Invalid pidOverride (expected integer 1..65535 or hex 0xXXXX)' });
+          return;
+        }
+        pidOverride = parsed;
+      }
+      const result = await mixer.reconnectUsb(pidOverride);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/diagnostics/ping', async (req, res) => {
+    try {
+      const body = req.body || {};
+      const cable = body.cable !== undefined ? Number(body.cable) : undefined;
+      const midiChannel = body.midiChannel !== undefined ? Number(body.midiChannel) : undefined;
+      const timeoutMs = body.timeoutMs !== undefined ? Number(body.timeoutMs) : undefined;
+      const autoProbe = Boolean(body.autoProbe);
+
+      if (cable !== undefined && (!Number.isInteger(cable) || cable < 0 || cable > 7)) {
+        res.status(400).json({ error: 'Invalid cable (expected integer 0..7)' });
+        return;
+      }
+      if (midiChannel !== undefined && (!Number.isInteger(midiChannel) || midiChannel < 1 || midiChannel > 16)) {
+        res.status(400).json({ error: 'Invalid midiChannel (expected integer 1..16)' });
+        return;
+      }
+      if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs < 200 || timeoutMs > 4000)) {
+        res.status(400).json({ error: 'Invalid timeoutMs (expected number 200..4000)' });
+        return;
+      }
+
+      const result = await mixer.pingMixer({ cable, midiChannel, autoProbe, timeoutMs });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Scene & Backup Management APIs
+  app.get('/api/debug/bulk-dump', async (req, res) => {
+    try {
+      const scene = Number(req.query.scene ?? 0);
+      const variant = (req.query.variant as string) || 'spaceS';
+      const timeout = Number(req.query.timeout ?? 2000);
+      const cable = Number(req.query.cable ?? 0);
+      const result = await mixer.debugCaptureBulkDump(scene, variant, timeout, cable);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   app.get('/api/scenes', (_req, res) => {
     res.json(mixer.getSceneList());
   });

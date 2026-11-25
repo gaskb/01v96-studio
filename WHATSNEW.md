@@ -9,6 +9,13 @@
 
 All notable changes to **01V96 Studio** are documented here in reverse chronological order.
 
+### [v0.9.0] - 2026-11-25
+- **Added**:
+  - **USB Mixer Diagnostics & Discovery Panel** (`MixerDiagnosticsCard` in `SETUP & CONF`): real-time scan of connected Yamaha USB devices (`VID 0x0499`), OS/Docker environment detection, exact `libusb` error reporting, contextual troubleshooting hints (macOS Yamaha USB-MIDI driver conflict, Linux `udev` rules, Docker Desktop USB passthrough, alternate Yamaha PIDs), and one-click diagnostic report copy.
+  - **SysEx Handshake Ping & Auto-Probe**: tests live bidirectional SysEx communication with latency measurement and can automatically probe USB Ports `1..8` (`cable 0..7`) and MIDI Channels `1..16` to diagnose `DIO/SETUP → MIDI/HOST` or `MIDI → SETUP` mismatches.
+  - **Configurable USB Port & MIDI Channel**: persisted in `data/studio-settings.json` with instant one-click apply from Auto-Probe results.
+  - **Diagnostics REST APIs**: `GET /api/diagnostics/usb`, `POST /api/diagnostics/reconnect` (with optional `pidOverride`), and `POST /api/diagnostics/ping`.
+
 ### [v0.8.0] - 2026-11-15
 - **Added**:
   - **Studio Settings Panel** (`⚙️ SETUP & CONF`): centralized configuration for global fader glide speed (`1..30 dB/s`, persisted in `data/studio-settings.json`) and one-click `SLW` activation/deactivation across all channels.
@@ -82,6 +89,13 @@ All notable changes to **01V96 Studio** are documented here in reverse chronolog
 ## Italiano
 
 Tutte le modifiche rilevanti apportate a **01V96 Studio** sono documentate qui in ordine cronologico inverso.
+
+### [v0.9.0] - 2026-11-25
+- **Novità (Added)**:
+  - **Pannello Diagnostica & Rilevamento Mixer USB** (`MixerDiagnosticsCard` in `SETUP & CONF`): scansione in tempo reale dei dispositivi USB Yamaha (`VID 0x0499`), rilevamento ambiente OS/Docker, visualizzazione dell'errore esatto `libusb`, suggerimenti contestuali (conflitto driver Yamaha USB-MIDI su macOS, regole `udev` su Linux, passthrough USB su Docker Desktop, PID Yamaha alternativi) e copia del report diagnostico con un clic.
+  - **Ping Handshake SysEx & Auto-Probe**: testa la comunicazione SysEx bidirezionale con misura della latenza e scansiona automaticamente le porte USB `1..8` (`cable 0..7`) e i canali MIDI `1..16` per individuare eventuali disallineamenti su `DIO/SETUP → MIDI/HOST` o `MIDI → SETUP`.
+  - **Selezione Porta USB & Canale MIDI**: salvati in `data/studio-settings.json` e applicabili con un clic dai risultati dell'Auto-Probe.
+  - **Nuove API REST di diagnostica**: `GET /api/diagnostics/usb`, `POST /api/diagnostics/reconnect` (con `pidOverride` opzionale) e `POST /api/diagnostics/ping`.
 
 ### [v0.8.0] - 2026-11-15
 - **Novità (Added)**:

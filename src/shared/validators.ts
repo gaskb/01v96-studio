@@ -213,7 +213,9 @@ export const BaseClientCommandSchema = z.discriminatedUnion('type', [
 
   z.object({
     type: z.literal('set_studio_settings'),
-    faderGlideDbPerSec: z.number().finite().min(1).max(60),
+    faderGlideDbPerSec: z.number().finite().min(1).max(60).optional(),
+    usbCable: z.number().int().min(0).max(7).optional(),
+    midiChannel: z.number().int().min(1).max(16).optional(),
   }),
 
   z.object({

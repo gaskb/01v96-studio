@@ -4,6 +4,8 @@ import { StudioSettings } from '../shared/types.js';
 
 const DEFAULT_SETTINGS: StudioSettings = {
   faderGlideDbPerSec: 6,
+  usbCable: 0,
+  midiChannel: 1,
 };
 
 export class StudioSettingsStorage {
@@ -24,8 +26,13 @@ export class StudioSettingsStorage {
         const raw = fs.readFileSync(this.filePath, 'utf-8');
         const parsed = JSON.parse(raw);
         const glide = Number(parsed?.faderGlideDbPerSec);
+        const usbCable = Number(parsed?.usbCable);
+        const midiChannel = Number(parsed?.midiChannel);
         return {
           faderGlideDbPerSec: Number.isFinite(glide) && glide >= 1 && glide <= 60 ? glide : 6,
+          usbCable: Number.isInteger(usbCable) && usbCable >= 0 && usbCable <= 7 ? usbCable : 0,
+          midiChannel:
+            Number.isInteger(midiChannel) && midiChannel >= 1 && midiChannel <= 16 ? midiChannel : 1,
         };
       }
     } catch (err) {
@@ -57,6 +64,18 @@ export class StudioSettingsStorage {
       const glide = Number(partial.faderGlideDbPerSec);
       if (Number.isFinite(glide)) {
         this.settings.faderGlideDbPerSec = Math.max(1, Math.min(60, Math.round(glide * 10) / 10));
+      }
+    }
+    if (partial.usbCable !== undefined) {
+      const cable = Math.round(Number(partial.usbCable));
+      if (Number.isInteger(cable)) {
+        this.settings.usbCable = Math.max(0, Math.min(7, cable));
+      }
+    }
+    if (partial.midiChannel !== undefined) {
+      const ch = Math.round(Number(partial.midiChannel));
+      if (Number.isInteger(ch)) {
+        this.settings.midiChannel = Math.max(1, Math.min(16, ch));
       }
     }
     this.save();
