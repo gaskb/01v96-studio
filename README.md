@@ -50,6 +50,9 @@ Modern Web Remote Controller & Channel Strip Interface for **Yamaha 01V96 / 01V9
 - **Show Backup & Restore**:
   - Full or selective export of scenes, custom channel/aux/bus names, and modular layouts into portable JSON show packages.
   - Interactive restore wizard allowing selective scene restoration and slot remapping (e.g. restore scene #01 from file into slot #05 on the console).
+- **Built-in USB Mixer Diagnostics & Discovery (`SETUP & CONF`)**:
+  - Live USB scanner for connected Yamaha devices (`VID 0x0499`), OS/Docker detection, exact `libusb` error reporting, and contextual troubleshooting hints.
+  - SysEx Handshake Ping & **Auto-Probe** across USB Ports `1..8` and MIDI Channels `1..16` with one-click diagnostic report copy.
 
 ---
 
@@ -86,13 +89,21 @@ Modern Web Remote Controller & Channel Strip Interface for **Yamaha 01V96 / 01V9
 
 ---
 
-### 🔌 Hardware Setup & Linux Permissions
+### 🔌 Hardware Setup, Compatibility & OS Notes
 
-The mixer connects to the host machine using a standard USB A-to-B cable.
+The mixer connects to the host machine using a standard USB Type-A to Type-B cable.
 
-#### Mixer USB Identification
-- **Vendor ID (VID)**: `0x0499` (Yamaha Corporation)
-- **Product ID (PID)**: `0x5008` (01V96 Digital Audio Mixer)
+#### Supported Mixers
+| Model | USB VID:PID | Support |
+| :--- | :--- | :--- |
+| **Yamaha 01V96 (v1) / 01V96V2 / 01V96 VCM** | `0x0499:0x5008` | ✅ Fully supported |
+| **Yamaha 01V96i** | `0x0499:0x1509` | ⚠️ Experimental (selectable via **SETUP & CONF → USB Diagnostics**) |
+| **02R96 / DM1000 / DM2000** | Other PIDs | ❌ Not officially supported |
+
+#### Required Settings on the Physical 01V96 Mixer
+1. **`DIO/SETUP` → `MIDI/HOST`**: set **`GENERAL`** / **`STUDIO MANAGER`** to **`USB`** (Port `1`).
+2. **`MIDI` → `SETUP`**: set **`TX CH = 1`**, **`RX CH = 1`**, and **`PARAMETER CHANGE TX/RX = ON`**.
+3. If your console uses a different USB Port (`1–8`) or MIDI Channel (`1–16`), open **⚙️ SETUP & CONF → Mixer USB Diagnostics** and run **🧭 Auto-Probe** to detect and apply them automatically.
 
 #### Linux udev Rules (Homelab / Server)
 
@@ -113,22 +124,34 @@ Make sure your server user belongs to the `audio` and `plugdev` groups:
 sudo usermod -aG audio,plugdev $USER
 ```
 
+#### macOS Troubleshooting (Important!)
+- **Do NOT use Docker Desktop on macOS for live USB control**: Docker Desktop runs inside a Linux VM that does **not** support `/dev/bus/usb` passthrough — it will always stay in `simulated` (offline) mode. Run 01V96 Studio natively with `npm start` instead.
+- **Yamaha USB-MIDI Driver / CoreMIDI conflict (`LIBUSB_ERROR_ACCESS`)**: Close Yamaha Studio Manager and any DAW (Logic, Cubase, etc.) before starting. If the official Yamaha USB-MIDI Driver is installed in `/Library/Audio/MIDI Drivers/`, macOS may automatically claim the mixer interface and prevent `libusb` direct access.
+- **USB-C Hubs**: If no Yamaha device appears in **SETUP & CONF → 🔍 Scan USB**, try bypassing cheap multi-port USB-C hubs with a direct USB-B to USB-C cable/adapter.
+
 ---
 
 ### 🚀 Getting Started (Local Development)
 
 #### Prerequisites
 - Node.js 22 LTS or newer
-- `libusb-1.0-0-dev`, `python3`, `make`, `g++` (required to compile native Node `usb` bindings)
+- `libusb-1.0-0-dev`, `python3`, `make`, `g++` (required on Linux or when building native Node `usb` bindings from source)
 
 ##### Ubuntu / Debian
 ```bash
 sudo apt-get install -y libusb-1.0-0-dev build-essential python3
 ```
 
-##### macOS
+##### macOS (via Homebrew)
+If you don't have **Homebrew** installed yet, follow the official guide at [brew.sh](https://brew.sh) or run this command in Terminal:
 ```bash
-brew install libusb
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+*(On Apple Silicon Macs, run the `eval "$(/opt/homebrew/bin/brew shellenv)"` command printed at the end of the installer.)*
+
+Then install Node.js and `libusb`:
+```bash
+brew install node libusb
 ```
 
 #### Installation & Run
@@ -170,7 +193,9 @@ npm run typecheck
 
 ---
 
-### 🐳 Docker Deployment
+### 🐳 Docker Deployment (Linux Only for USB)
+
+> **⚠️ macOS & Windows Notice**: Docker Desktop on macOS and Windows runs inside a virtual machine and **does not support USB passthrough (`/dev/bus/usb`)**. To connect a physical Yamaha 01V96 on macOS or Windows, run the app natively using `npm start` (see [Getting Started](#getting-started-local-development)).
 
 A multi-stage `Dockerfile` is provided, packaging the production build and native `libusb` runtime into a lean `node:22-bookworm-slim` image.
 
@@ -215,6 +240,9 @@ Custom channel and scene labels will be automatically preserved in `./data/scene
 - `POST /api/backup/restore`: Restores scenes with customizable target slot remapping and Zod schema validation.
 - `GET /api/scene-labels`: Returns all custom labels indexed by scene number.
 - `POST /api/scene-labels`: Updates custom labels for a given scene.
+- `GET /api/diagnostics/usb`: Scans USB bus for Yamaha devices (`VID 0x0499`), reports OS/Docker environment, last `libusb` error, and contextual hints.
+- `POST /api/diagnostics/reconnect`: Forces a clean USB disconnect/reconnect cycle (supports optional `pidOverride`).
+- `POST /api/diagnostics/ping`: Runs a live SysEx handshake test (and optional `autoProbe` across USB Ports `1–8` and MIDI Channels `1–16`).
 
 #### WebSocket API (`/ws`)
 Full-duplex real-time communication:
@@ -269,6 +297,9 @@ Interfaccia di controllo remoto web e channel strip per mixer digitali **Yamaha 
 - **Backup & Ripristino Show File**:
   - Esportazione selettiva o totale di scene del mixer, etichette personalizzate e layout in file JSON compatti e portabili.
   - Wizard interattivo di ripristino che consente la selezione scena per scena e la rimappatura libera degli slot di destinazione (es. ripristina la scena #01 del file nello slot #05 del mixer).
+- **Diagnostica & Rilevamento Mixer USB Integrato (`SETUP & CONF`)**:
+  - Scansione in tempo reale dei dispositivi Yamaha (`VID 0x0499`), rilevamento OS/Docker, errore esatto `libusb` e suggerimenti guidati.
+  - Test Handshake SysEx (**Ping**) e **Auto-Probe** automatico su Porte USB `1..8` e Canali MIDI `1..16`, con copia del report diagnostico in un clic.
 
 ---
 
@@ -305,13 +336,21 @@ Interfaccia di controllo remoto web e channel strip per mixer digitali **Yamaha 
 
 ---
 
-### 🔌 Connessione Hardware & Permessi Linux
+### 🔌 Connessione Hardware, Compatibilità & Note per Sistema Operativo
 
 Il mixer si collega al computer host tramite un comune cavo USB da tipo A a tipo B.
 
-#### Identificativi USB del Mixer
-- **Vendor ID (VID)**: `0x0499` (Yamaha Corporation)
-- **Product ID (PID)**: `0x5008` (Mixer Digitale 01V96)
+#### Mixer Compatibili
+| Modello | USB VID:PID | Supporto |
+| :--- | :--- | :--- |
+| **Yamaha 01V96 (v1) / 01V96V2 / 01V96 VCM** | `0x0499:0x5008` | ✅ Pienamente supportato |
+| **Yamaha 01V96i** | `0x0499:0x1509` | ⚠️ Sperimentale (selezionabile da **SETUP & CONF → Diagnostica USB**) |
+| **02R96 / DM1000 / DM2000** | Altri PID | ❌ Non supportati ufficialmente |
+
+#### Impostazioni Richieste sul Mixer Fisico 01V96
+1. **`DIO/SETUP` → `MIDI/HOST`**: imposta **`GENERAL`** / **`STUDIO MANAGER`** su **`USB`** (Porta `1`).
+2. **`MIDI` → `SETUP`**: imposta **`TX CH = 1`**, **`RX CH = 1`** e **`PARAMETER CHANGE TX/RX = ON`**.
+3. Se il tuo mixer usa una Porta USB (`1–8`) o un Canale MIDI (`1–16`) diverso, apri **⚙️ SETUP & CONF → Diagnostica & Rilevamento Mixer USB** e clicca **🧭 Auto-Probe** per rilevarli e applicarli in un clic.
 
 #### Regole udev per Linux (Server / Homelab)
 
@@ -332,22 +371,34 @@ Assicurati che l'utente appartenga ai gruppi `audio` e `plugdev`:
 sudo usermod -aG audio,plugdev $USER
 ```
 
+#### Risoluzione Problemi su macOS (Importante!)
+- **NON usare Docker Desktop su macOS per il controllo USB**: Docker Desktop gira dentro una VM Linux e **non supporta il passthrough USB (`/dev/bus/usb`)**, quindi resterà sempre in modalità offline/simulata. Su Mac avvia 01V96 Studio nativamente con `npm start`.
+- **Conflitto Driver Yamaha USB-MIDI / CoreMIDI (`LIBUSB_ERROR_ACCESS`)**: chiudi Yamaha Studio Manager ed eventuali DAW (Logic, Cubase, ecc.) prima di avviare il server. Se il driver ufficiale Yamaha USB-MIDI è installato in `/Library/Audio/MIDI Drivers/`, macOS aggancia automaticamente il mixer bloccando l'accesso diretto via `libusb`.
+- **Hub USB-C multiporta**: se nella scansione (**SETUP & CONF → 🔍 Scansiona USB**) non compare nessun dispositivo Yamaha, prova a collegare il mixer con un cavo/adattatore diretto USB-B → USB-C bypassando hub economici.
+
 ---
 
 ### 🚀 Installazione & Avvio Locale
 
 #### Prerequisiti
 - Node.js 22 LTS o superiore
-- Pacchetti `libusb-1.0-0-dev`, `python3`, `make`, `g++` (necessari per compilare il binding nativo `usb`)
+- Pacchetti `libusb-1.0-0-dev`, `python3`, `make`, `g++` (necessari su Linux o per compilare il binding nativo `usb` da sorgente)
 
 ##### Ubuntu / Debian
 ```bash
 sudo apt-get install -y libusb-1.0-0-dev build-essential python3
 ```
 
-##### macOS
+##### macOS (tramite Homebrew)
+Se non hai ancora installato **Homebrew**, segui la guida ufficiale su [brew.sh](https://brew.sh) oppure incolla questo comando nel **Terminale**:
 ```bash
-brew install libusb
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+*(Su Mac Apple Silicon M1/M2/M3/M4, esegui il comando `eval "$(/opt/homebrew/bin/brew shellenv)"` mostrato al termine dell'installazione.)*
+
+Poi installa Node.js e `libusb`:
+```bash
+brew install node libusb
 ```
 
 #### Installazione e Avvio
@@ -389,7 +440,9 @@ npm run typecheck
 
 ---
 
-### 🐳 Deploy con Docker
+### 🐳 Deploy con Docker (Solo Linux per accesso USB)
+
+> **⚠️ Avviso per macOS e Windows**: Docker Desktop su macOS e Windows gira in una macchina virtuale e **non supporta il passthrough USB (`/dev/bus/usb`)**. Per controllare fisicamente lo Yamaha 01V96 da Mac o Windows, esegui l'app nativamente con `npm start` (vedi [Installazione & Avvio Locale](#installazione--avvio-locale)).
 
 Il progetto include un `Dockerfile` multi-stage che compila l'applicazione e impacchetta il runtime con `libusb` in un'immagine leggera basata su `node:22-bookworm-slim`.
 
@@ -434,6 +487,9 @@ I dati persistenti delle etichette e della configurazione saranno salvati nella 
 - `POST /api/backup/restore`: Ripristina le scene con rimappatura degli slot di destinazione e validazione dello schema Zod.
 - `GET /api/scene-labels`: Restituisce tutte le etichette personalizzate indicizzate per scena.
 - `POST /api/scene-labels`: Aggiorna le etichette di una scena.
+- `GET /api/diagnostics/usb`: Scansiona il bus USB cercando dispositivi Yamaha (`VID 0x0499`), mostra ambiente OS/Docker, ultimo errore `libusb` e suggerimenti mirati.
+- `POST /api/diagnostics/reconnect`: Forza un ciclo di disconnessione/riconnessione USB (supporta `pidOverride` opzionale).
+- `POST /api/diagnostics/ping`: Esegue un test di handshake SysEx live (con `autoProbe` opzionale su Porte USB `1–8` e Canali MIDI `1–16`).
 
 #### WebSocket (`/ws`)
 Canale bidirezionale in tempo reale:
