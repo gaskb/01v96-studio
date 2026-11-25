@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer } from '../server/index.js';
-import { buildParamRequest, EL_INPUT_FADER, MODEL_UNIVERSAL } from '../server/protocol.js';
+import { MixerController } from '../server/mixer-controller.js';
+import {
+  buildParamChange,
+  buildParamRequest,
+  EL_INPUT_FADER,
+  MODEL_01V96,
+  MODEL_UNIVERSAL,
+} from '../server/protocol.js';
 import {
   buildDiagnosticHints,
   extractLibUsbErrorCode,
@@ -235,5 +242,85 @@ describe('Diagnostics REST API Endpoints & Error Paths', () => {
         midiChannel: 1,
       }),
     });
+  });
+});
+
+describe('MixerController.pingMixer SysEx Handshake & Auto-Probe (Mocked USB)', () => {
+  const validFaderReply = buildParamChange(MODEL_UNIVERSAL, 1, EL_INPUT_FADER, 0, 0, 823);
+  const yamahaHeartbeat = [0xf0, 0x43, 0x10, 0x3e, MODEL_01V96, 0x7f, 0xf7];
+
+  function createMockConnectedController(
+    onSend: (sysex: number[], cable: number, emitInbound: (pkt: number[]) => void) => void
+  ): MixerController {
+    const controller = new MixerController(() => {});
+    const emitInbound = (pkt: number[]) => (controller as any).handleIncomingMidi(pkt);
+    (controller as any).transport = {
+      isConnected: () => true,
+      sendSysEx: async (sysex: number[], _priority?: string, cable = 0) => {
+        setTimeout(() => onSend(sysex, cable, emitInbound), 5);
+      },
+      setDefaultCable: () => {},
+      clearLowPriorityQueue: () => {},
+      disconnect: () => {},
+    };
+    return controller;
+  }
+
+  it('succeeds immediately when mixer replies on configured USB port and MIDI channel', async () => {
+    const controller = createMockConnectedController((sysex, cable, emit) => {
+      if (cable === 0 && sysex[2] === 0x30) {
+        emit(validFaderReply);
+      }
+    });
+
+    const res = await controller.pingMixer({ cable: 0, midiChannel: 1, timeoutMs: 250 });
+    expect(res.ok).toBe(true);
+    expect(res.usbConnected).toBe(true);
+    expect(res.latencyMs).not.toBeNull();
+    expect(res.responsesReceived).toBe(1);
+    expect(res.sampleHex[0]).toContain('f0 43 10 3e 7f');
+    expect(res.detectedCable).toBeUndefined();
+    expect(res.detectedMidiChannel).toBeUndefined();
+  });
+
+  it('ignores Yamaha keepalive heartbeat packets and reports timeout when mixer does not answer', async () => {
+    const controller = createMockConnectedController((_sysex, _cable, emit) => {
+      emit(yamahaHeartbeat);
+    });
+
+    const res = await controller.pingMixer({ cable: 0, midiChannel: 1, autoProbe: false, timeoutMs: 200 });
+    expect(res.ok).toBe(false);
+    expect(res.usbConnected).toBe(true);
+    expect(res.responsesReceived).toBe(0);
+    expect(res.diagnosis).toContain('DIO/SETUP');
+  });
+
+  it('auto-probes and detects mixer responding on an alternate USB port (cable 2)', async () => {
+    const controller = createMockConnectedController((sysex, cable, emit) => {
+      if (cable === 2 && sysex[2] === 0x30) {
+        emit(validFaderReply);
+      }
+    });
+
+    const res = await controller.pingMixer({ cable: 0, midiChannel: 1, autoProbe: true, timeoutMs: 200 });
+    expect(res.ok).toBe(true);
+    expect(res.detectedCable).toBe(2);
+    expect(res.detectedMidiChannel).toBe(1);
+    expect(res.diagnosis).toContain('USB Port 3');
+  });
+
+  it('auto-probes and detects mixer responding on an alternate MIDI channel (Ch 2)', async () => {
+    const controller = createMockConnectedController((sysex, cable, emit) => {
+      // MIDI Ch 2 => status byte 0x31
+      if (cable === 0 && sysex[2] === 0x31) {
+        emit(validFaderReply);
+      }
+    });
+
+    const res = await controller.pingMixer({ cable: 0, midiChannel: 1, autoProbe: true, timeoutMs: 200 });
+    expect(res.ok).toBe(true);
+    expect(res.detectedCable).toBe(0);
+    expect(res.detectedMidiChannel).toBe(2);
+    expect(res.diagnosis).toContain('MIDI Channel 2');
   });
 });
